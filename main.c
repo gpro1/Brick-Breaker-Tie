@@ -1,5 +1,3 @@
-//First "working" version! Bricks can be broken, but ball is too big and will erase bricks near to it. Creating another version to erase the previous ball before drawing the new one. 
-
 
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
@@ -8,35 +6,53 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 
-//enum direction {NONE, HRZ, VRT, BOTH};
+enum direction {NONE, HRZ, VRT, BOTH};
+
+enum gameState {IDLE, PLAYING, LOST, DEMO};
 
 void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
 void drawBall(uint8_t x, uint8_t y);
 void drawBricks();
-void checkCollision(uint8_t x, uint8_t y);
+enum direction checkCollision(uint8_t x, uint8_t y);
 void removeBrick(uint8_t column, uint8_t row);
-uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00};
+uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
+
+//A weird array representing what column/row the edges of the ball are in. Did it this way so I could use an array to check collisions instead of another huge if statement
+//Global so it can be preserved so we can check the previous position
+uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
 
 uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}};
 
-uint8_t brickSprites[] PROGMEM = {0x00, 
-							0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
-							0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
-							0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
-							0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
-							0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 
-							0x00, 0x00, 0x00};
+//Stores initial brick pattern
+uint8_t brickSprites[2][64] PROGMEM = {
+										{0x00, 
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 
+										0x00, 0x00, 0x00},
+							
+										{0x00, 
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
+										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 
+										0x00, 0x00, 0x00}
+							
+									   };
 							
 
-							
-							
+uint8_t gameField[2][64]; //Stores current brick pattern 
+
 //uint8_t ballSprite[]= {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00};
 
 //uint8_t bricks[20] = {0};
 #define DISPLAY_SIZE_X 64
 #define DISPLAY_SIZE_Y 48
 
-#define BALL_HEIGHT 8
+#define BALL_HEIGHT 8 //make smaller
 #define BALL_WIDTH 8
 
 
@@ -47,65 +63,109 @@ int main (void){
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
 	
+	enum gameState state;
+	state = IDLE;
+	
 	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
 	
-	uint8_t ball2PosX = 0;
-	uint8_t ball2PosY = 13;
+	//uint8_t ball2PosX = 0;
+	//uint8_t ball2PosY = 13;
 	
 	uint8_t increasing = 1;
 	uint8_t increasing2 = 1;
-	
-	drawBall(ballPosX, ballPosY);
-	drawBricks();
 
 	for(;;){	//Infinite loop	
 	
-	
-		//Move the ball
-		if(increasing){
-			ballPosY++;
-		}
-		else{
-			ballPosY--;
-		}
-		if(increasing2){
-			ballPosX++;
-		}
-		else{
-			ballPosX--;
-		}
-		
-		//Check for boundary collisions
-		if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT){
-			increasing = 0;
-		}
-		if(ballPosY == 0){
-			increasing = 1;
-		}
-		if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH){
-			increasing2 = 0;
-		}
-		if(ballPosX == 0){
-			increasing2 = 1;
-		}
-		
-		//Check for brick collisions if ball is high enough
-		if(ballPosY >= 32 - BALL_HEIGHT){
+		switch(state){
 			
-			checkCollision(ballPosX, ballPosY);
-			//NOTE FOR FUTURE GREG: The bottom corner of the ball sprite is the position reference pixel. (Aka it is in the sprite, not outside)
+			case IDLE: //Reset all the things. LATER: Wait for user input to begin.
+				
+				state = PLAYING;
+				ballPosX = 0;
+				ballPosY = 0;
+				increasing = 1;
+				increasing2 = 1;
+				uint8_t i,j;
+				for (j=0;j<2;j++){
+					for(i=0;i<64;i++){
+						gameField[j][i] = pgm_read_byte(&brickSprites[j][i]);
+					}
+				}
+				for (j=0;j<4;j++){
+					for(i=0;i<5;i++){
+						brickStatus[j][i] = 3;
+					}
+					edgePositions[j] = 0;
+				}
+				drawBall(ballPosX, ballPosY);
+				drawBricks();
+				//CLEAR SCREEN??
+				break;
+				
+			case PLAYING:
+				//Move the ball
+				if(increasing){
+					ballPosY++;
+				}
+				else{
+					ballPosY--;
+				}
+				if(increasing2){
+					ballPosX++;
+				}
+				else{
+					ballPosX--;
+				}
+				
+				//Check for boundary collisions
+				if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT+2){
+					increasing = 0;
+				}
+				if(ballPosY == 0){
+					//increasing = 1;
+					state = LOST;
+				}
+				if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH+2){
+					increasing2 = 0;
+				}
+				if(ballPosX == 0){
+					increasing2 = 1;
+				}
+				
+				//Check for brick collisions if ball is high enough
+				if(ballPosY >= 32 - BALL_HEIGHT){
+					enum direction newCollisions;
+					newCollisions = checkCollision(ballPosX, ballPosY);
+					if(newCollisions == HRZ){
+						increasing2 ^= 0x01;
+					}
+					else if(newCollisions == VRT){
+						increasing ^= 0x01;
+					}
+					else if(newCollisions == BOTH){
+						increasing ^= 0x01;
+						increasing2 ^= 0x02;
+					}
+				}
+				
+				
+				//redraw ball
+				drawBall(ballPosX, ballPosY);
+				
+				_delay_ms(200);
+				break;
+				
+			case LOST:
+				state = IDLE;
+				break;
+			case DEMO: 
+				state = IDLE;
+				break;	
+			default:
+				state = IDLE;
+				break;
 		}
-		
-		//drawBricks();
-		//redraw ball
-		drawBall(ballPosX, ballPosY);
-		
-		
-		
-		_delay_ms(16);
-	
-		
 	
 	}
 		
@@ -114,29 +174,28 @@ int main (void){
 
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
 //Maybe change to checkpotentialcollsiion? Sends back potential collisions and main can check ball direction?
-void checkCollision(uint8_t x, uint8_t y){
+enum direction checkCollision(uint8_t x, uint8_t y){
 	
 	//These will store the limits of the VISIBLE part of the sprite.
-	//Calculations are hard coded to my current sprite as I probably will not change it.
-	uint8_t spriteTop = y+6;
-	uint8_t spriteLeft = x+6;
+	//Calculations are hard coded to my current sprite as I probably will not change it. 
+	uint8_t spriteTop = y+5;
+	uint8_t spriteLeft = x+5;
 	uint8_t spriteRight = x+2;
 	uint8_t spriteBottom = y+2;
-	//uint8_t ball_in_rows [2] = {0};
-	//uint8_t ball_in_column[2] = {0};
-	uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
-	
+	uint8_t numCollisions = 0;
 	uint8_t i,j;
 	
-	//uint8_t left_in_column = 0;
-	//uint8_t right_in_column = 0;
-	//uint8_t top_in_row = 0;
-	//uint8_t bottom_in_row = 0;
+	uint8_t prevEdgePositions[4];//left column, right column, top row, bottom row
+	//Reset edge positions
+	for(i = 0; i < 4; i++){
+		prevEdgePositions[i] = edgePositions[i];
+		edgePositions[i] = 0;
+	}
 	
 	
-	
-	
-	//enum direction collisionDir = none;
+		
+	enum direction collisionDir;
+	collisionDir = NONE;
 	
 	//Find out one "brick space" the ball is in
 	//once this space is found, check ONLY the next one.
@@ -146,45 +205,34 @@ void checkCollision(uint8_t x, uint8_t y){
 	
 	//Vertical
 	if(spriteTop < 35){
-		//ball_in_rows[0] = 1;
 		edgePositions[2] = 1;
 		edgePositions[3] = 1; //not really true, but convenient
 	}
 	else if(spriteTop < 39){
-		//ball_in_rows[0] = 2;
-		//ball_in_rows[1] = 1;
 		edgePositions[2] = 2;
 		edgePositions[3] = 1;
 	}
 	else if(spriteTop < 43){
-		//ball_in_rows[0] = 3;
-		//ball_in_rows[1] = 2;
 		edgePositions[2] = 3;
 		edgePositions[3] = 2;		
 	}
 	else if(spriteTop < 47){
-		//ball_in_rows[0] = 4;
-		//ball_in_rows[1] = 3;	
 		edgePositions[2] = 4;
 		edgePositions[3] = 3;		
 	}
 	else if(spriteTop == 47){
-		//ball_in_rows[0] = 4;
 		edgePositions[2] = 4; //kind of true??
 		edgePositions[3] = 4;
 	}
 	
 	//Horizontal
 	if(spriteLeft < 14){
-		//ball_in_column[0] = 1;
 		edgePositions[0] = 1;
 		edgePositions[1] = 1;
 	}
 	else if (spriteLeft < 26){
-		//ball_in_column[0] = 2;
 		edgePositions[0] = 2;
 		if(spriteRight < 14){
-			//ball_in_column[1] = 1;
 			edgePositions[1] = 1;
 		}
 		else{
@@ -192,21 +240,17 @@ void checkCollision(uint8_t x, uint8_t y){
 		}
 	}
 	else if (spriteLeft < 38){
-		//ball_in_column[0] = 3;
 		edgePositions[0] = 3;
 		if(spriteRight < 26){
 			edgePositions[1] = 2;
-			//ball_in_column[1] = 2;
 		}
 		else{
 			edgePositions[1] = 3;
 		}
 	}
 	else if (spriteLeft < 50){
-		//ball_in_column[0] = 4;
 		edgePositions[0] = 4;
 		if(spriteRight < 38){
-			//ball_in_column[1] = 3;
 			edgePositions[1] = 3;
 		}
 		else{
@@ -214,10 +258,8 @@ void checkCollision(uint8_t x, uint8_t y){
 		}
 	}
 	else if (spriteLeft < 62){
-		//ball_in_column[0] = 5;
 		edgePositions[0] = 5;
 		if(spriteRight < 50){
-			//ball_in_column[1] = 4;
 			edgePositions[1] = 4;
 		}
 		else{
@@ -225,26 +267,42 @@ void checkCollision(uint8_t x, uint8_t y){
 		}
 	}
 	else if (spriteLeft >= 62){
-		//ball_in_column[0] = 5;
 		edgePositions[0] = 5;
 		edgePositions[1] = 5;
 	}
 	
+	//Iterate through the brick positions that the ball is in and remove those bricks (if they exist)
 	for (j = edgePositions[1]; j <= edgePositions[0]; j++){
 		for (i = edgePositions[3]; i <= edgePositions[2]; i++){
 			if(i>0 && j>0){
 				if(brickStatus[i-1][j-1] == 3){
-					brickStatus[i-1][j-1] = 0;
+					brickStatus[i-1][j-1] = 0; //maybe more appropriate inside the function?
 					removeBrick(j,i);
+					//numCollisions++;
+					if(edgePositions[i] != prevEdgePositions[i] && collisionDir == NONE){
+						collisionDir = VRT;		
+					}
+					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == HRZ){
+						collisionDir = BOTH;
+					}
+					/*if(edgePositions[j] != prevEdgePositions[j] && collisionDir == NONE){
+						collisionDir = HRZ;		
+					}
+					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == VRT){
+						collisionDir = BOTH;
+					}*/ //Maybe implement horizontal later? Issues with this implementation
 				}
 			}
 		}
-	}
 	
-	//return(NONE);
+	}
+
+	
+	return(collisionDir);
 	
 }
 
+//Removes the brick in column,row. Removed from "gameField" and updates screen
 void removeBrick(uint8_t column, uint8_t row){
 	uint8_t page;
 	uint8_t startColumn = 3 + ((column-1)*12);
@@ -253,7 +311,7 @@ void removeBrick(uint8_t column, uint8_t row){
 	uint8_t r1;
 	uint8_t r2;
 	
-	
+	//Determine the position of the brick in the context of the screen (and set the limits for drawing)
 	USI_Buf[0] = (0x3D<<1);
 	USI_Buf[1] = 0x01;
 	if(row < 3){
@@ -278,6 +336,7 @@ void removeBrick(uint8_t column, uint8_t row){
 	USI_Buf[4] = page; 
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
 	
+	//Update screen, update gameField
 	USI_Buf[1] = 0x40;
 	
 	for(i = 0; i < 10; i++){		
@@ -293,14 +352,14 @@ void removeBrick(uint8_t column, uint8_t row){
 			USI_Buf[i+2] |= 0x70;
 		}//megan was here 
 		
+		gameField[page-4][startColumn+i] = USI_Buf[i+2];
+		
 	}
 	USI_TWI_Start_Read_Write(USI_Buf,12);
 	
-	
-	
 }
 
-//I might not need this function but right now it's for testing.
+//Sort of slow, so only used on startup currently. Will be useful for starting a new game. 
 void drawBricks(){
 	
 		
@@ -315,37 +374,28 @@ void drawBricks(){
 	
 	//Set starting & ending page for bricks
 	USI_Buf[2] = 0x22;
-	USI_Buf[3] = 0x04; //Start at 5
+	USI_Buf[3] = 0x04; //Start at 4
 	USI_Buf[4] = 0x05; //End at 5
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
 	
 	USI_Buf[1] = 0x40;
 	uint8_t i = 0;
-	/*uint8_t brickCount = 1;
-	for(i=0; i < 64; i++){
-		if(i == 0 || i == 2 || i == 64 || i == 63){
-			USI_Buf[i+2] = 0x00;
-		}
-		else if(brickCount == 1 || brickCount == 12){
-			USI_Buf[i+2] = 0x00;
-			if (brickCount == 12) brickCount = 0;
-			brickCount++;
-		}
-		else{
-			USI_Buf[i+2] = 0x77;
-			brickCount++;
-		}
-		
-	}
-	USI_TWI_Start_Read_Write(USI_Buf,66);*/
+	uint8_t j = 0;
+	uint8_t bufIndex = 0;
+
 	
-	for(i=0; i<128; i++){
-		USI_Buf[i+2] = pgm_read_byte(&brickSprites[((i<64)?i:i-64)]);
+	for(i=0; i<2; i++){
+		for(j=0; j<64;j++){		
+			USI_Buf[bufIndex+2] = gameField[i][j];
+			bufIndex++;
+		}
 	}
 	USI_TWI_Start_Read_Write(USI_Buf,130);
 	
 }
 
+//Re-Draws the ball at x,y. Ball sprite has black border (to erase previously drawn ball) so this function also re-draws bricks that would have been erased by this.
+//The bottom corner of the ball sprite is the position reference pixel. (Aka it is in the sprite, not outside)
 void drawBall(uint8_t x, uint8_t y){
 	
 	uint8_t USI_Buf[18] = {0};
@@ -355,7 +405,6 @@ void drawBall(uint8_t x, uint8_t y){
 	//Stores where the ball is vertically (which pages?)
 	uint8_t page = (uint8_t)(y/8);
 	uint8_t pagePixel = y%8;
-	
 	uint8_t i,j;
 	
 	//Set starting & ending column for drawing ball
@@ -367,7 +416,7 @@ void drawBall(uint8_t x, uint8_t y){
 	//select page the ball is on
 	USI_Buf[2] = 0x22;
 	USI_Buf[3] = page; 
-	if(pagePixel){
+	if(pagePixel){ //This determines if the ball is on 1 or 2 pages
 		USI_Buf[4] = page + 1; 
 		j = 16;
 	}
@@ -377,26 +426,30 @@ void drawBall(uint8_t x, uint8_t y){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
 	
+	//DrAW THE BALL!!
 	USI_Buf[1] = 0x40;
-	
-	
 	for(i = 0; i < j; i++){
 		
-		if(i<8){
-			USI_Buf[i+2] = (pgm_read_byte(&ballSprite[i]))<<(pagePixel);
+		if(i<8){ 
+			USI_Buf[i+2] = (pgm_read_byte(&ballSprite[i]))<<(pagePixel); //Draw the ball in buffer
+			if(page >= 4) USI_Buf[i+2] |= gameField[page-4][i+x]; //OR in surrounding bricks
 		}
-		else{
+		else{ //Only happens when ball is on 2 pages
 			USI_Buf[i+2] = (pgm_read_byte(&ballSprite[i-8]))>>(8-pagePixel);
+			if(page >= 3) USI_Buf[i+2] |= gameField[page-3][i-8+x];
 		}
 		
+		
+		
 	}
-	USI_TWI_Start_Read_Write(USI_Buf, pagePixel?18:10);
+	USI_TWI_Start_Read_Write(USI_Buf, pagePixel?18:10); //8 extra bytes if the ball is on 2 pages
 	
 }
 
+//Initialize function for the 128x64 display. Draws a boundary to represent the real display I'm going to use
 void initializeTestDisplay(){
 	
-	uint8_t USI_Buf[80] = {0}; //Initialize buffer to all 0
+	uint8_t USI_Buf[80] = {0}; 
 	
 	DDRB |= (1 << PB1);
 	PORTB &= ~(1<<PORTB1); //Pull display reset low for 10us
