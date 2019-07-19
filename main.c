@@ -1,4 +1,4 @@
-#define TESTING
+//#define TESTING
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
 #include <avr/io.h>
@@ -106,6 +106,22 @@ int main (void){
 				drawBall(ballPosX, ballPosY);
 				drawBricks();
 				//CLEAR SCREEN??
+				
+				ADMUX |= (0x03)|(1 << ADLAR); 
+				ADCSRA |= (1 << ADEN); //enable adc
+				_delay_us(10);
+				for(;;){
+					ADCSRA |= (1 << ADSC);
+					while(ADCSRA & (1 <<ADSC));
+
+					if(ADCH != 0xFF){//Wait for user input to start the game
+						state = PLAYING;
+						break;
+					}	
+					_delay_ms(20);
+				}
+				
+				
 				break;
 				
 			case PLAYING:
@@ -169,7 +185,7 @@ int main (void){
 				break;
 			case TEST: //currently being used for ADC test
 				
-				ADMUX |= (0x03)|(1 << ADLAR); //is it called ADMUX? hopefully
+				ADMUX |= (0x03)|(1 << ADLAR); 
 				ADCSRA |= (1 << ADEN); //enable adc
 				
 				for(;;){
