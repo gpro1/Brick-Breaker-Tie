@@ -1,4 +1,4 @@
-
+//#define TESTING
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
 #include <avr/io.h>
@@ -8,7 +8,7 @@
 
 enum direction {NONE, HRZ, VRT, BOTH};
 
-enum gameState {IDLE, PLAYING, LOST, DEMO};
+enum gameState {IDLE, PLAYING, LOST, DEMO, TEST};
 
 void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
 void drawBall(uint8_t x, uint8_t y);
@@ -64,7 +64,12 @@ int main (void){
 	initializeTestDisplay();
 	
 	enum gameState state;
+	
 	state = IDLE;
+	
+	#ifdef TESTING
+	state = TEST;
+	#endif
 	
 	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
@@ -101,6 +106,22 @@ int main (void){
 				drawBall(ballPosX, ballPosY);
 				drawBricks();
 				//CLEAR SCREEN??
+				
+				ADMUX |= (0x03)|(1 << ADLAR); 
+				ADCSRA |= (1 << ADEN); //enable adc
+				_delay_us(10);
+				for(;;){
+					ADCSRA |= (1 << ADSC);
+					while(ADCSRA & (1 <<ADSC));
+
+					if(ADCH != 0xFF){//Wait for user input to start the game
+						state = PLAYING;
+						break;
+					}	
+					_delay_ms(20);
+				}
+				
+				
 				break;
 				
 			case PLAYING:
@@ -161,7 +182,29 @@ int main (void){
 				break;
 			case DEMO: 
 				state = IDLE;
-				break;	
+				break;
+			case TEST: //currently being used for ADC test
+				
+				ADMUX |= (0x03)|(1 << ADLAR); 
+				ADCSRA |= (1 << ADEN); //enable adc
+				
+				for(;;){
+					ADCSRA |= (1 << ADSC);
+					while(ADCSRA & (1 <<ADSC));
+
+					if(ADCH > 128){
+						
+						drawBall(12, 12);
+					}
+					else{
+						drawBall(32,12);
+					}
+					print8BitNum(ADCH);
+					
+				}
+
+							
+				break;
 			default:
 				state = IDLE;
 				break;
@@ -524,6 +567,42 @@ void initializeTestDisplay(){
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
 	
 }
+
+#ifdef TESTING
+void print8BitNum(uint8_t num){
+	
+		uint8_t USI_Buf[18] = {0};
+		uint8_t i = 0;
+		uint8_t j = 1;
+		USI_Buf[0] = (0x3D<<1);
+		USI_Buf[1] = 0x01;
+		//Set starting & ending column
+		USI_Buf[2] = 0x21;
+		USI_Buf[3] = 0x00;
+		USI_Buf[4] = 0x08; 
+		USI_TWI_Start_Read_Write(USI_Buf, 5);
+		//select page
+		USI_Buf[2] = 0x22;
+		USI_Buf[3] = 0; 
+		USI_Buf[4] = 0; 
+		USI_TWI_Start_Read_Write(USI_Buf, 5);
+		
+		USI_Buf[1] = 0x40;
+		for(i; i < 8; i++){
+			if(num & j){
+				USI_Buf[2+i] = 0XFF;
+			}
+			else{
+				USI_Buf[2+i] = 0X00;
+			}
+			j = j << 1;
+		}
+		USI_Buf[10] = 0xC3;
+		USI_TWI_Start_Read_Write(USI_Buf, 11);
+		
+		
+}
+#endif
 
 
 
