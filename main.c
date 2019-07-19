@@ -105,6 +105,7 @@ int main (void){
 				}
 				drawBall(ballPosX, ballPosY);
 				drawBricks();
+				drawPaddle(45);
 				//CLEAR SCREEN??
 				
 				ADMUX |= (0x03)|(1 << ADLAR); 
@@ -487,6 +488,30 @@ void drawBall(uint8_t x, uint8_t y){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf, pagePixel?18:10); //8 extra bytes if the ball is on 2 pages
 	
+}
+
+void drawPaddle(uint8_t x){
+	
+		uint8_t USI_Buf[18] = {0};
+		uint8_t i = 0;
+		USI_Buf[0] = (0x3D<<1);
+		USI_Buf[1] = 0x01;
+		//Set starting & ending column
+		USI_Buf[2] = 0x21;
+		USI_Buf[3] = 0x20 + x;
+		USI_Buf[4] = 0x29 + x; 
+		USI_TWI_Start_Read_Write(USI_Buf, 5);
+		//select page
+		USI_Buf[2] = 0x22;
+		USI_Buf[3] = 0; 
+		USI_Buf[4] = 0; 
+		USI_TWI_Start_Read_Write(USI_Buf, 5);
+		
+		USI_Buf[1] = 0x40;
+		for(i; i < 10; i++){
+			USI_Buf[2+i] = 0x70;
+		}
+		USI_TWI_Start_Read_Write(USI_Buf, 12);
 }
 
 //Initialize function for the 128x64 display. Draws a boundary to represent the real display I'm going to use
