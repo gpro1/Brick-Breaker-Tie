@@ -15,6 +15,7 @@ void drawBall(uint8_t x, uint8_t y);
 void drawBricks();
 enum direction checkCollision(uint8_t x, uint8_t y);
 void removeBrick(uint8_t column, uint8_t row);
+enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
 uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
 
 //A weird array representing what column/row the edges of the ball are in. Did it this way so I could use an array to check collisions instead of another huge if statement
@@ -169,6 +170,19 @@ int main (void){
 						increasing ^= 0x01;
 						increasing2 ^= 0x02;
 					}
+				}
+				else if(ballPosY <= 6){
+					
+					enum direction newCollisions;
+					newCollisions = checkPaddleHit(ballPosX, 45, increasing2);
+					if(newCollisions == VRT){
+						increasing ^= 0x01;
+					}
+					else if(newCollisions == BOTH){
+						increasing ^= 0x01;
+						increasing2 ^= 0x02;
+					}
+					
 				}
 				
 				
@@ -340,10 +354,46 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 		}
 	
 	}
-
 	
 	return(collisionDir);
 	
+}
+
+//Checks if the ball has hit the paddle, and returns "vrt" or "both" depending if the ball changes direction horizontally.
+//This function should only be called if the ball is within Y range of the paddle. ( ballY <= 6 I think should be a hit)
+//requires ball X position, Paddle X position and ball horizontal direction
+enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir){
+	
+	//These will store the limits of the VISIBLE part of the sprite.
+	//Calculations are hard coded to my current sprite as I probably will not change it. 
+	uint8_t leftRightHit = 2; //0 for left, 1 for right
+	uint8_t spriteRight = ballX+2;
+
+	
+	enum direction collisionDir;
+	collisionDir = NONE;
+	
+	if((spriteRight >= (paddleX-4)) && (spriteRight <= paddleX + 1)){ //right side hit
+		leftRightHit = 1;
+	}
+	else if(spriteRight == (paddleX + 2)){
+		leftRightHit = ballDir;
+	}
+	else if((spriteRight >= (paddleX+3)) && (spriteRight <= paddleX + 10)) {//left hit
+		leftRightHit = 0;
+	}
+	else{
+		return collisionDir; //Ball did not hit (not within x range)
+	}
+	
+	if(ballDir ^ leftRightHit){
+		collisionDir = BOTH;
+	}
+	else
+	{
+		collisionDir = VRT;
+	}
+	return collisionDir;
 }
 
 //Removes the brick in column,row. Removed from "gameField" and updates screen
