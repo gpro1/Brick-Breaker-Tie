@@ -6,12 +6,13 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 
+
 enum direction {NONE, HRZ, VRT, BOTH};
 
 enum gameState {IDLE, PLAYING, LOST, DEMO, TEST};
 
 void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
-void drawBall(uint8_t x, uint8_t y);
+void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
 void drawBricks();
 enum direction checkCollision(uint8_t x, uint8_t y);
 void removeBrick(uint8_t column, uint8_t row);
@@ -75,6 +76,8 @@ int main (void){
 	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
 	
+	uint8_t paddlePos = 40; 
+	
 	//uint8_t ball2PosX = 0;
 	//uint8_t ball2PosY = 13;
 	
@@ -104,9 +107,9 @@ int main (void){
 					}
 					edgePositions[j] = 0;
 				}
-				drawBall(ballPosX, ballPosY);
+				drawBall(ballPosX, ballPosY, paddlePos);
 				drawBricks();
-				drawPaddle(45);
+				drawPaddle(paddlePos);
 				//CLEAR SCREEN??
 				
 				ADMUX |= (0x03)|(1 << ADLAR); 
@@ -168,26 +171,26 @@ int main (void){
 					}
 					else if(newCollisions == BOTH){
 						increasing ^= 0x01;
-						increasing2 ^= 0x02;
+						increasing2 ^= 0x01;
 					}
 				}
 				else if(ballPosY <= 6){
 					
 					enum direction newCollisions;
-					newCollisions = checkPaddleHit(ballPosX, 45, increasing2);
+					newCollisions = checkPaddleHit(ballPosX, paddlePos, increasing2);
 					if(newCollisions == VRT){
 						increasing ^= 0x01;
 					}
 					else if(newCollisions == BOTH){
 						increasing ^= 0x01;
-						increasing2 ^= 0x02;
+						increasing2 ^= 0x01;
 					}
 					
 				}
 				
 				
 				//redraw ball
-				drawBall(ballPosX, ballPosY);
+				drawBall(ballPosX, ballPosY, paddlePos);
 				
 				_delay_ms(200);
 				break;
@@ -200,7 +203,7 @@ int main (void){
 				break;
 			case TEST: //currently being used for ADC test
 				
-				ADMUX |= (0x03)|(1 << ADLAR); 
+				/*ADMUX |= (0x03)|(1 << ADLAR); 
 				ADCSRA |= (1 << ADEN); //enable adc
 				
 				for(;;){
@@ -209,14 +212,14 @@ int main (void){
 
 					if(ADCH > 128){
 						
-						drawBall(12, 12);
+						drawBall(12, 12, );
 					}
 					else{
 						drawBall(32,12);
 					}
 					print8BitNum(ADCH);
 					
-				}
+				}*/
 
 							
 				break;
@@ -366,7 +369,7 @@ enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir){
 	
 	//These will store the limits of the VISIBLE part of the sprite.
 	//Calculations are hard coded to my current sprite as I probably will not change it. 
-	uint8_t leftRightHit = 2; //0 for left, 1 for right
+	uint8_t leftRightHit = 2; //1 for left, 0 for right
 	uint8_t spriteRight = ballX+2;
 
 	
@@ -374,13 +377,13 @@ enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir){
 	collisionDir = NONE;
 	
 	if((spriteRight >= (paddleX-4)) && (spriteRight <= paddleX + 1)){ //right side hit
-		leftRightHit = 1;
+		leftRightHit = 0;
 	}
 	else if(spriteRight == (paddleX + 2)){
 		leftRightHit = ballDir;
 	}
 	else if((spriteRight >= (paddleX+3)) && (spriteRight <= paddleX + 10)) {//left hit
-		leftRightHit = 0;
+		leftRightHit = 1;
 	}
 	else{
 		return collisionDir; //Ball did not hit (not within x range)
@@ -490,7 +493,8 @@ void drawBricks(){
 
 //Re-Draws the ball at x,y. Ball sprite has black border (to erase previously drawn ball) so this function also re-draws bricks that would have been erased by this.
 //The bottom corner of the ball sprite is the position reference pixel. (Aka it is in the sprite, not outside)
-void drawBall(uint8_t x, uint8_t y){
+//Right now requires paddle position to re-draw paddle... Maybe turn ball position, paddle positions into global variables later
+void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 	
 	uint8_t USI_Buf[18] = {0};
 	USI_Buf[0] = (0x3D<<1);
@@ -526,11 +530,25 @@ void drawBall(uint8_t x, uint8_t y){
 		
 		if(i<8){ 
 			USI_Buf[i+2] = (pgm_read_byte(&ballSprite[i]))<<(pagePixel); //Draw the ball in buffer
-			if(page >= 4) USI_Buf[i+2] |= gameField[page-4][i+x]; //OR in surrounding bricks
+			if(page >= 4){
+				USI_Buf[i+2] |= gameField[page-4][i+x]; //OR in surrounding bricks
+			}
+			else if(page == 0){
+				if((x+i) >= paddleX && (x+i) <= (paddleX + 9)){
+					USI_Buf[i+2] |= 0x70; //OR in paddle
+				}
+			}
 		}
 		else{ //Only happens when ball is on 2 pages
 			USI_Buf[i+2] = (pgm_read_byte(&ballSprite[i-8]))>>(8-pagePixel);
-			if(page >= 3) USI_Buf[i+2] |= gameField[page-3][i-8+x];
+			if(page >= 3) {
+				USI_Buf[i+2] |= gameField[page-3][i-8+x];
+			}
+			/*else if(page == 0){
+				if((x+i) >= paddleX && (x+i) <= (paddleX + 9)){
+					USI_Buf[i+2] |= 0x70; //OR in paddle
+				}
+			}*/
 		}
 		
 		
