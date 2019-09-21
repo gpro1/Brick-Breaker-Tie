@@ -46,7 +46,7 @@ void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
 									   };*/
 							
 
-//uint8_t gameField[2][64]; //Stores current brick pattern 
+uint8_t gameField[2][64]; //Stores current brick pattern 
 
 //uint8_t ballSprite[]= {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00};
 
@@ -64,7 +64,18 @@ int main (void){
 	
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
-	_delay_ms(100);
+	drawBricks(); //I don't have a clear function so this will do
+	
+	
+	
+	DDRB |= (1 << PB4);
+	PORTB |= (1 << PORTB4); //Set PB4 HIGH before transmission, Low after. Measure this with a logic analyzer!
+	
+	print8BitNum(0b01010101); //sends 21 bytes total. Once this works measure sending one byte? 
+	
+	PORTB &= ~(1<<PORTB4); 
+	
+	
 	/*enum gameState state;
 	
 	state = IDLE;
@@ -459,7 +470,7 @@ void removeBrick(uint8_t column, uint8_t row){
 	
 }*/
 
-/*
+
 //Sort of slow, so only used on startup currently. Will be useful for starting a new game. 
 void drawBricks(){
 	
@@ -493,7 +504,7 @@ void drawBricks(){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf,130);
 	
-}*/
+}
 
 /*
 
