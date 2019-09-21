@@ -64,7 +64,7 @@ int main (void){
 	
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
-	
+	_delay_ms(100);
 	/*enum gameState state;
 	
 	state = IDLE;
@@ -234,10 +234,10 @@ int main (void){
 				break;
 		}
 	
-	}
+	}*/
 		
 	return 0;
-}*/
+}
 /*
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
 //Maybe change to checkpotentialcollsiion? Sends back potential collisions and main can check ball direction?
