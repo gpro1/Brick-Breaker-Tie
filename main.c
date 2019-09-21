@@ -12,21 +12,21 @@ enum direction {NONE, HRZ, VRT, BOTH};
 enum gameState {IDLE, PLAYING, LOST, DEMO, TEST};
 
 void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
-void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
-void drawBricks();
-enum direction checkCollision(uint8_t x, uint8_t y);
-void removeBrick(uint8_t column, uint8_t row);
-enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
-uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
+//void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
+//void drawBricks();
+//enum direction checkCollision(uint8_t x, uint8_t y);
+//void removeBrick(uint8_t column, uint8_t row);
+//enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
+//uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
 
 //A weird array representing what column/row the edges of the ball are in. Did it this way so I could use an array to check collisions instead of another huge if statement
 //Global so it can be preserved so we can check the previous position
-uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
+//uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
 
-uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}};
+//uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}};
 
 //Stores initial brick pattern
-uint8_t brickSprites[2][64] PROGMEM = {
+/*uint8_t brickSprites[2][64] PROGMEM = {
 										{0x00, 
 										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
 										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
@@ -43,10 +43,10 @@ uint8_t brickSprites[2][64] PROGMEM = {
 										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 
 										0x00, 0x00, 0x00}
 							
-									   };
+									   };*/
 							
 
-uint8_t gameField[2][64]; //Stores current brick pattern 
+//uint8_t gameField[2][64]; //Stores current brick pattern 
 
 //uint8_t ballSprite[]= {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00};
 
@@ -234,11 +234,11 @@ int main (void){
 				break;
 		}
 	
-	}*/
+	}
 		
 	return 0;
-}
-
+}*/
+/*
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
 //Maybe change to checkpotentialcollsiion? Sends back potential collisions and main can check ball direction?
 enum direction checkCollision(uint8_t x, uint8_t y){
@@ -352,12 +352,7 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == HRZ){
 						collisionDir = BOTH;
 					}
-					/*if(edgePositions[j] != prevEdgePositions[j] && collisionDir == NONE){
-						collisionDir = HRZ;		
-					}
-					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == VRT){
-						collisionDir = BOTH;
-					}*/ //Maybe implement horizontal later? Issues with this implementation
+					
 				}
 			}
 		}
@@ -366,8 +361,8 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 	
 	return(collisionDir);
 	
-}
-
+}*/
+/*
 //Checks if the ball has hit the paddle, and returns "vrt" or "both" depending if the ball changes direction horizontally.
 //This function should only be called if the ball is within Y range of the paddle. ( ballY <= 6 I think should be a hit)
 //requires ball X position, Paddle X position and ball horizontal direction
@@ -403,8 +398,10 @@ enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir){
 		collisionDir = VRT;
 	}
 	return collisionDir;
-}
+}*/
 
+
+/*
 //Removes the brick in column,row. Removed from "gameField" and updates screen
 void removeBrick(uint8_t column, uint8_t row){
 	uint8_t page;
@@ -460,8 +457,9 @@ void removeBrick(uint8_t column, uint8_t row){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf,12);
 	
-}
+}*/
 
+/*
 //Sort of slow, so only used on startup currently. Will be useful for starting a new game. 
 void drawBricks(){
 	
@@ -495,7 +493,9 @@ void drawBricks(){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf,130);
 	
-}
+}*/
+
+/*
 
 //Re-Draws the ball at x,y. Ball sprite has black border (to erase previously drawn ball) so this function also re-draws bricks that would have been erased by this.
 //The bottom corner of the ball sprite is the position reference pixel. (Aka it is in the sprite, not outside)
@@ -550,11 +550,7 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 			if(page >= 3) {
 				USI_Buf[i+2] |= gameField[page-3][i-8+x];
 			}
-			/*else if(page == 0){
-				if((x+i) >= paddleX && (x+i) <= (paddleX + 9)){
-					USI_Buf[i+2] |= 0x70; //OR in paddle
-				}
-			}*/
+			
 		}
 		
 		
@@ -562,8 +558,8 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf, pagePixel?18:10); //8 extra bytes if the ball is on 2 pages
 	
-}
-
+}*/
+/*
 void drawPaddle(uint8_t x){
 	
 		uint8_t USI_Buf[18] = {0};
@@ -586,7 +582,7 @@ void drawPaddle(uint8_t x){
 			USI_Buf[2+i] = 0x70;
 		}
 		USI_TWI_Start_Read_Write(USI_Buf, 12);
-}
+}*/
 
 //Initialize function for the 128x64 display. Draws a boundary to represent the real display I'm going to use
 void initializeTestDisplay(){
