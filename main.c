@@ -1,4 +1,4 @@
-//#define TESTING
+#define TESTING
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
 #include <avr/io.h>
@@ -54,7 +54,7 @@ uint8_t gameField[2][64]; //Stores current brick pattern
 #define DISPLAY_SIZE_X 64
 #define DISPLAY_SIZE_Y 48
 
-#define BALL_HEIGHT 8 //make smaller
+#define BALL_HEIGHT 8 
 #define BALL_WIDTH 8
 
 
@@ -65,7 +65,7 @@ int main (void){
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
 	
-	enum gameState state;
+	/*enum gameState state;
 	
 	state = IDLE;
 	
@@ -88,7 +88,7 @@ int main (void){
 	
 		switch(state){
 			
-			case IDLE: //Reset all the things. LATER: Wait for user input to begin.
+			case IDLE: //Reset all the things. 
 				
 				state = PLAYING;
 				ballPosX = 0;
@@ -119,7 +119,7 @@ int main (void){
 					ADCSRA |= (1 << ADSC);
 					while(ADCSRA & (1 <<ADSC));
 
-					if(ADCH != 0xFF){//Wait for user input to start the game
+					if(ADCH != 0xFF){//Wait for user input to start the game FIX THIS, IT CAN START RANDOMLY
 						state = PLAYING;
 						break;
 					}	
@@ -130,7 +130,12 @@ int main (void){
 				break;
 				
 			case PLAYING:
-				//Move the ball
+			
+				//New stuff to do: check for user input, move paddle, check paddle boundary collisions
+				//Check for user input faster than user can move switch
+			
+			
+				//Move the ball (should happen at some reasonable speed)
 				if(increasing){
 					ballPosY++;
 				}
@@ -144,7 +149,7 @@ int main (void){
 					ballPosX--;
 				}
 				
-				//Check for boundary collisions
+				//Check for boundary collisions (Should happen every time ball moves)
 				if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT+2){
 					increasing = 0;
 				}
@@ -159,7 +164,7 @@ int main (void){
 					increasing2 = 1;
 				}
 				
-				//Check for brick collisions if ball is high enough
+				//Check for brick collisions if ball is high enough (Should happen every time the ball moves)
 				if(ballPosY >= 32 - BALL_HEIGHT){
 					enum direction newCollisions;
 					newCollisions = checkCollision(ballPosX, ballPosY);
@@ -174,7 +179,7 @@ int main (void){
 						increasing2 ^= 0x01;
 					}
 				}
-				else if(ballPosY <= 6){
+				else if(ballPosY <= 6){ //Check for paddle collisions if ball is low enough (should happen every time the paddle or ball moves)
 					
 					enum direction newCollisions;
 					newCollisions = checkPaddleHit(ballPosX, paddlePos, increasing2);
@@ -190,9 +195,10 @@ int main (void){
 				
 				
 				//redraw ball
-				drawBall(ballPosX, ballPosY, paddlePos);
+				drawBall(ballPosX, ballPosY, paddlePos);//Should happen every time ball moves
+				//should also happen if paddle moves and ball is low enough
 				
-				_delay_ms(200);
+				_delay_ms(25);
 				break;
 				
 			case LOST:
@@ -201,7 +207,7 @@ int main (void){
 			case DEMO: 
 				state = IDLE;
 				break;
-			case TEST: //currently being used for ADC test
+			case TEST: //currently being used to test time between events
 				
 				/*ADMUX |= (0x03)|(1 << ADLAR); 
 				ADCSRA |= (1 << ADEN); //enable adc
@@ -219,7 +225,7 @@ int main (void){
 					}
 					print8BitNum(ADCH);
 					
-				}*/
+				}
 
 							
 				break;
@@ -228,7 +234,7 @@ int main (void){
 				break;
 		}
 	
-	}
+	}*/
 		
 	return 0;
 }
