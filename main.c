@@ -65,6 +65,55 @@ int main (void){
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
 	
+
+	
+	uint8_t frame1[10] = {(0x3D<<1),0x40, 0x00, 0x20, 0x64, 0x04, 0x04, 0x24, 0x60, 0x00};
+	uint8_t frame2[10] = {(0x3D<<1),0x40, 0x00, 0x60, 0x24, 0x06, 0x06, 0x64, 0x20, 0x00};
+	uint8_t frame3[10] = {(0x3D<<1),0x40, 0x00, 0x64, 0x4A, 0x09, 0x09, 0x6A, 0x44, 0x00};
+	
+	uint8_t USI_Buf[18] = {0};
+	uint8_t i = 0;
+	uint8_t j = 1;
+	USI_Buf[0] = (0x3D<<1);
+	USI_Buf[1] = 0x01;
+	//Set starting & ending column
+	USI_Buf[2] = 0x21;
+	USI_Buf[3] = 0x25;
+	USI_Buf[4] = 0x2C; 
+	USI_TWI_Start_Read_Write(USI_Buf, 5);
+	//select page
+	USI_Buf[2] = 0x22;
+	USI_Buf[3] = 2; 
+	USI_Buf[4] = 2; 
+	USI_TWI_Start_Read_Write(USI_Buf, 5);
+	
+	//Add two more tasks: one to get user input, one to print ADC value. Create a multitasking scheme for these three tasks. 
+	
+	while (1){ //animation task.
+		for(i=0; i < 4; i++){
+			switch (i){	
+			case 0:
+				USI_TWI_Start_Read_Write(frame1, 10);
+				break;
+			case 1:
+				USI_TWI_Start_Read_Write(frame2, 10);
+				break;
+			case 2: 
+				USI_TWI_Start_Read_Write(frame3, 10);
+				break;
+			case 3:
+				USI_TWI_Start_Read_Write(frame2, 10);
+				break;
+			default:
+				break;
+			}
+			_delay_ms(100);
+		}
+		
+	}
+	
+	
+	
 	
 	
 	
