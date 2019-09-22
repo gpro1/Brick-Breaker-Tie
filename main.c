@@ -19,6 +19,10 @@ void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
 //enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
 //uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
 
+void task1();
+void task2();
+void task3();
+
 //A weird array representing what column/row the edges of the ball are in. Did it this way so I could use an array to check collisions instead of another huge if statement
 //Global so it can be preserved so we can check the previous position
 //uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
@@ -66,53 +70,13 @@ int main (void){
 	initializeTestDisplay();
 	
 
+		//Add two more tasks: one to get user input, one to print ADC value. Create a multitasking scheme for these three tasks. 
 	
-	uint8_t frame1[10] = {(0x3D<<1),0x40, 0x00, 0x20, 0x64, 0x04, 0x04, 0x24, 0x60, 0x00};
-	uint8_t frame2[10] = {(0x3D<<1),0x40, 0x00, 0x60, 0x24, 0x06, 0x06, 0x64, 0x20, 0x00};
-	uint8_t frame3[10] = {(0x3D<<1),0x40, 0x00, 0x64, 0x4A, 0x09, 0x09, 0x6A, 0x44, 0x00};
-	
-	uint8_t USI_Buf[18] = {0};
-	uint8_t i = 0;
-	uint8_t j = 1;
-	USI_Buf[0] = (0x3D<<1);
-	USI_Buf[1] = 0x01;
-	//Set starting & ending column
-	USI_Buf[2] = 0x21;
-	USI_Buf[3] = 0x25;
-	USI_Buf[4] = 0x2C; 
-	USI_TWI_Start_Read_Write(USI_Buf, 5);
-	//select page
-	USI_Buf[2] = 0x22;
-	USI_Buf[3] = 2; 
-	USI_Buf[4] = 2; 
-	USI_TWI_Start_Read_Write(USI_Buf, 5);
-	
-	//Add two more tasks: one to get user input, one to print ADC value. Create a multitasking scheme for these three tasks. 
-	
-	while (1){ //animation task.
-		for(i=0; i < 4; i++){
-			switch (i){	
-			case 0:
-				USI_TWI_Start_Read_Write(frame1, 10);
-				break;
-			case 1:
-				USI_TWI_Start_Read_Write(frame2, 10);
-				break;
-			case 2: 
-				USI_TWI_Start_Read_Write(frame3, 10);
-				break;
-			case 3:
-				USI_TWI_Start_Read_Write(frame2, 10);
-				break;
-			default:
-				break;
-			}
-			_delay_ms(100);
-		}
+	while(1){
+		task1();
+		_delay_ms(100);
 		
 	}
-	
-	
 	
 	
 	
@@ -284,6 +248,53 @@ int main (void){
 	}*/
 		
 	return 0;
+}
+
+void task1(){
+	
+	static int state = 0;
+	
+	uint8_t frame1[10] = {(0x3D<<1),0x40, 0x00, 0x20, 0x64, 0x04, 0x04, 0x24, 0x60, 0x00};
+	uint8_t frame2[10] = {(0x3D<<1),0x40, 0x00, 0x60, 0x24, 0x06, 0x06, 0x64, 0x20, 0x00};
+	uint8_t frame3[10] = {(0x3D<<1),0x40, 0x00, 0x64, 0x4A, 0x09, 0x09, 0x6A, 0x44, 0x00};
+	
+	uint8_t USI_Buf[18] = {0};
+	uint8_t i = 0;
+	uint8_t j = 1;
+	USI_Buf[0] = (0x3D<<1);
+	USI_Buf[1] = 0x01;
+	//Set starting & ending column
+	USI_Buf[2] = 0x21;
+	USI_Buf[3] = 0x25;
+	USI_Buf[4] = 0x2C; 
+	USI_TWI_Start_Read_Write(USI_Buf, 5);
+	//select page
+	USI_Buf[2] = 0x22;
+	USI_Buf[3] = 2; 
+	USI_Buf[4] = 2; 
+	USI_TWI_Start_Read_Write(USI_Buf, 5);
+	
+
+	
+	switch (state){
+		case 0:
+			USI_TWI_Start_Read_Write(frame1, 10);
+			break;
+		case 1:
+			USI_TWI_Start_Read_Write(frame2, 10);
+			break;
+		case 2: 
+			USI_TWI_Start_Read_Write(frame3, 10);
+			break;
+		case 3:
+			USI_TWI_Start_Read_Write(frame2, 10);
+			break;
+		default:
+			break;	
+	}
+	
+	state++;
+	if(state > 3) state = 0;
 }
 /*
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
