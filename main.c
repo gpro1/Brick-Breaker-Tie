@@ -1,4 +1,4 @@
-//#define TESTING
+#define TESTING
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
 #include <avr/io.h>
@@ -68,19 +68,20 @@ int main (void){
 	
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
+	ADMUX |= (0x03)|(1 << ADLAR); //left adjust and select channel 
+	ADCSRA |= (1 << ADEN); //enable adc
+
+	TCCR0A |= 0x02; //CTC mode;
+	TCCR0B |= 0x05; //prescale 1024
+	OCR0A = 98; //approx 100ms period
 	
 
-		//Add two more tasks: one to get user input, one to print ADC value. Create a multitasking scheme for these three tasks. 
-	
 	while(1){
+		while(!(TIFR & (1<<OCF0A)));
+		TIFR |= (1<<OCF0A);
 		task1();
-		_delay_ms(100);
-		
+		task2();		
 	}
-	
-	
-	
-	
 	
 	/*enum gameState state;
 	
@@ -252,7 +253,7 @@ int main (void){
 
 void task1(){
 	
-	static int state = 0;
+	static uint8_t state = 0;
 	
 	uint8_t frame1[10] = {(0x3D<<1),0x40, 0x00, 0x20, 0x64, 0x04, 0x04, 0x24, 0x60, 0x00};
 	uint8_t frame2[10] = {(0x3D<<1),0x40, 0x00, 0x60, 0x24, 0x06, 0x06, 0x64, 0x20, 0x00};
@@ -295,6 +296,26 @@ void task1(){
 	
 	state++;
 	if(state > 3) state = 0;
+}
+
+void task2(){
+	
+	static uint8_t state = 0;
+	
+	switch(state){
+		case 0:
+			ADCSRA |= (1 << ADSC); //start conversion
+			state++;
+		break;
+		case 1: //conversion has started, wait for it to be done
+			if(ADCSRA & (1<<ADSC)) break;
+			print8BitNum(ADCH);
+			state--;
+		break;
+		default:
+		break;
+	}
+	
 }
 /*
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
