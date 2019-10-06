@@ -79,8 +79,8 @@ int main (void){
 	while(1){
 		while(!(TIFR & (1<<OCF0A)));
 		TIFR |= (1<<OCF0A);
-		task1();
-		task2();		
+		//task1();
+		//task2();		
 	}
 	
 	/*enum gameState state;
