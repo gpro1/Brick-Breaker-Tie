@@ -75,10 +75,18 @@ int main (void){
 	TCCR0B |= 0x05; //prescale 1024
 	OCR0A = 98; //approx 100ms period
 	
+	DDRB |= (1 << PB4);
 
 	while(1){
 		while(!(TIFR & (1<<OCF0A)));
 		TIFR |= (1<<OCF0A);
+		
+		if(PORTB & (1 << PORTB4)){
+			PORTB &= ~(1 << PORTB4); 
+		}
+		else{
+			PORTB |= (1 << PORTB4); 
+		}
 		//task1();
 		//task2();		
 	}
