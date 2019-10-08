@@ -69,11 +69,11 @@ int main (void){
 	
 	
 	DDRB |= (1 << PB4);
-	PORTB |= (1 << PORTB4); //Set PB4 HIGH before transmission, Low after. Measure this with a logic analyzer!
+	PORTB |= (1 << PB4); //Set PB4 HIGH before transmission, Low after. Measure this with a logic analyzer!
 	
 	print8BitNum(0b01010101); //sends 21 bytes total. Once this works measure sending one byte? 
 	
-	PORTB &= ~(1<<PORTB4); 
+	PORTB &= ~(1<<PB4); 
 	
 	
 	/*enum gameState state;
