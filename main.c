@@ -130,69 +130,98 @@ int main (void){
 				break;
 				
 			case PLAYING:
-				//Move the ball
-				if(increasing){
-					ballPosY++;
-				}
-				else{
-					ballPosY--;
-				}
-				if(increasing2){
-					ballPosX++;
-				}
-				else{
-					ballPosX--;
-				}
-				
-				//Check for boundary collisions
-				if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT+2){
-					increasing = 0;
-				}
-				if(ballPosY == 0){
-					//increasing = 1;
-					state = LOST;
-				}
-				if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH+2){
-					increasing2 = 0;
-				}
-				if(ballPosX == 0){
-					increasing2 = 1;
-				}
-				
-				//Check for brick collisions if ball is high enough
-				if(ballPosY >= 32 - BALL_HEIGHT){
-					enum direction newCollisions;
-					newCollisions = checkCollision(ballPosX, ballPosY);
-					if(newCollisions == HRZ){
-						increasing2 ^= 0x01;
-					}
-					else if(newCollisions == VRT){
-						increasing ^= 0x01;
-					}
-					else if(newCollisions == BOTH){
-						increasing ^= 0x01;
-						increasing2 ^= 0x01;
-					}
-				}
-				else if(ballPosY <= 6){
+			
+				TCCR0A |= 0x02; //CTC mode;
+				TCCR0B |= 0x05; //prescale 1024
+				OCR0A = 98; //approx 100ms period
 					
-					enum direction newCollisions;
-					newCollisions = checkPaddleHit(ballPosX, paddlePos, increasing2);
-					if(newCollisions == VRT){
-						increasing ^= 0x01;
+				//Game loop (timed event loop, time slice = ~100ms)
+				while(1){
+					
+					//Wait for tick
+					while(!(TIFR & (1<<OCF0A)));
+					TIFR |= (1<<OCF0A);
+					
+					//Move the ball
+					if(increasing){
+						ballPosY++;
 					}
-					else if(newCollisions == BOTH){
-						increasing ^= 0x01;
-						increasing2 ^= 0x01;
+					else{
+						ballPosY--;
+					}
+					if(increasing2){
+						ballPosX++;
+					}
+					else{
+						ballPosX--;
 					}
 					
+					//Check for boundary collisions
+					if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT+2){
+						increasing = 0;
+					}
+					if(ballPosY == 0){
+						//increasing = 1;
+						state = LOST;
+						break;
+					}
+					if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH+2){
+						increasing2 = 0;
+					}
+					if(ballPosX == 0){
+						increasing2 = 1;
+					}
+					
+					//Check for user input + move paddle
+					ADCSRA |= (1 << ADSC);
+					while(ADCSRA & (1 <<ADSC));
+					
+					if(ADCH > 20 && ADCH < 40) //left on joystick
+					{
+						paddlePos++;
+						drawPaddle(paddlePos);
+					}
+					else if(ADCH > 155 && ADCH < 175) //right on joystick
+					{
+						paddlePos--;
+						drawPaddle(paddlePos);
+					}
+					
+					//Check for brick collisions if ball is high enough
+					if(ballPosY >= 32 - BALL_HEIGHT){
+						enum direction newCollisions;
+						newCollisions = checkCollision(ballPosX, ballPosY);
+						if(newCollisions == HRZ){
+							increasing2 ^= 0x01;
+						}
+						else if(newCollisions == VRT){
+							increasing ^= 0x01;
+						}
+						else if(newCollisions == BOTH){
+							increasing ^= 0x01;
+							increasing2 ^= 0x01;
+						}
+					}
+					else if(ballPosY <= 6){ //check paddle collisions if ball is low enough
+						
+						enum direction newCollisions;
+						newCollisions = checkPaddleHit(ballPosX, paddlePos, increasing2);
+						if(newCollisions == VRT){
+							increasing ^= 0x01;
+						}
+						else if(newCollisions == BOTH){
+							increasing ^= 0x01;
+							increasing2 ^= 0x01;
+						}
+						
+					}
+					
+					
+					//redraw ball
+					drawBall(ballPosX, ballPosY, paddlePos);	
+						
 				}
-				
-				
-				//redraw ball
-				drawBall(ballPosX, ballPosY, paddlePos);
-				
-				_delay_ms(200);
+			
 				break;
 				
 			case LOST:
@@ -564,8 +593,10 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 }
 
 
-//Bytes written: 22 worst case
-//Time estimate (transmission only): 10.532ms (~ 12ms with code to be safe)
+//Bytes written: 24 worst case
+//(~ 15ms with code to be safe)
+//Will need to be edited for small display
+
 void drawPaddle(uint8_t x){
 	
 		uint8_t USI_Buf[18] = {0};
@@ -574,8 +605,8 @@ void drawPaddle(uint8_t x){
 		USI_Buf[1] = 0x01;
 		//Set starting & ending column
 		USI_Buf[2] = 0x21;
-		USI_Buf[3] = 0x20 + x;
-		USI_Buf[4] = 0x29 + x; 
+		USI_Buf[3] = 0x1F + x;
+		USI_Buf[4] = 0x2A + x; 
 		USI_TWI_Start_Read_Write(USI_Buf, 5);
 		//select page
 		USI_Buf[2] = 0x22;
@@ -584,10 +615,12 @@ void drawPaddle(uint8_t x){
 		USI_TWI_Start_Read_Write(USI_Buf, 5);
 		
 		USI_Buf[1] = 0x40;
+		USI_Buf[2] = 0x00;
+		USI_Buf[13] = 0x00;
 		for(i; i < 10; i++){
-			USI_Buf[2+i] = 0x70;
+			USI_Buf[3+i] = 0x70;
 		}
-		USI_TWI_Start_Read_Write(USI_Buf, 12);
+		USI_TWI_Start_Read_Write(USI_Buf, 14);
 }
 
 //Initialize function for the 128x64 display. Draws a boundary to represent the real display I'm going to use
