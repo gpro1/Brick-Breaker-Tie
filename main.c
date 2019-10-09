@@ -17,7 +17,7 @@ void drawBricks();
 enum direction checkCollision(uint8_t x, uint8_t y);
 void removeBrick(uint8_t column, uint8_t row);
 enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
-uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
+const uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
 
 //A weird array representing what column/row the edges of the ball are in. Did it this way so I could use an array to check collisions instead of another huge if statement
 //Global so it can be preserved so we can check the previous position
@@ -26,7 +26,7 @@ uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom ro
 uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}};
 
 //Stores initial brick pattern
-uint8_t brickSprites[2][64] PROGMEM = {
+const uint8_t brickSprites[2][64] PROGMEM = {
 										{0x00, 
 										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
 										0x00, 0x00, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
@@ -235,6 +235,7 @@ int main (void){
 
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
 //Maybe change to checkpotentialcollsiion? Sends back potential collisions and main can check ball direction?
+//~45ms worst case (3x removeBrick, other code negligible) 
 enum direction checkCollision(uint8_t x, uint8_t y){
 	
 	//These will store the limits of the VISIBLE part of the sprite.
@@ -400,6 +401,8 @@ enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir){
 }
 
 //Removes the brick in column,row. Removed from "gameField" and updates screen
+//Bytes written: 22 worst case
+//Time estimate (transmission only): 10.532 (~15ms with code to be safe)
 void removeBrick(uint8_t column, uint8_t row){
 	uint8_t page;
 	uint8_t startColumn = 3 + ((column-1)*12);
@@ -494,6 +497,8 @@ void drawBricks(){
 //Re-Draws the ball at x,y. Ball sprite has black border (to erase previously drawn ball) so this function also re-draws bricks that would have been erased by this.
 //The bottom corner of the ball sprite is the position reference pixel. (Aka it is in the sprite, not outside)
 //Right now requires paddle position to re-draw paddle... Maybe turn ball position, paddle positions into global variables later
+//Bytes written: 28 worst case
+//Time estimate (transmission only): 13.286 ms (~17ms with code to be safe)
 void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 	
 	uint8_t USI_Buf[18] = {0};
@@ -558,6 +563,9 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 	
 }
 
+
+//Bytes written: 22 worst case
+//Time estimate (transmission only): 10.532ms (~ 12ms with code to be safe)
 void drawPaddle(uint8_t x){
 	
 		uint8_t USI_Buf[18] = {0};
@@ -588,9 +596,9 @@ void initializeTestDisplay(){
 	uint8_t USI_Buf[80] = {0}; 
 	
 	DDRB |= (1 << PB1);
-	PORTB &= ~(1<<PORTB1); //Pull display reset low for 10us
+	PORTB &= ~(1<<PB1); //Pull display reset low for 10us
 	_delay_us(10);
-	PORTB |= (1 << PORTB1); //back to high	
+	PORTB |= (1 << PB1); //back to high	
 	
 	USI_Buf[0] = (0x3D<<1)|0;
 	USI_Buf[1] = 0x01;
