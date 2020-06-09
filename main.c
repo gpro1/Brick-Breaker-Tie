@@ -23,7 +23,7 @@ const uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 
 //Global so it can be preserved so we can check the previous position
 uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
 
-uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}};
+uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}}; //for harder to break bricks (later)
 
 //Stores initial brick pattern
 const uint8_t brickSprites[2][64] PROGMEM = {
@@ -230,25 +230,9 @@ int main (void){
 			case DEMO: 
 				state = IDLE;
 				break;
-			case TEST: //currently being used for ADC test
-				
-				/*ADMUX |= (0x03)|(1 << ADLAR); 
-				ADCSRA |= (1 << ADEN); //enable adc
-				
-				for(;;){
-					ADCSRA |= (1 << ADSC);
-					while(ADCSRA & (1 <<ADSC));
-
-					if(ADCH > 128){
-						
-						drawBall(12, 12, );
-					}
-					else{
-						drawBall(32,12);
-					}
-					print8BitNum(ADCH);
-					
-				}*/
+			case TEST: 
+			
+				//print8BitNum(10);
 
 							
 				break;
