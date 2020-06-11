@@ -76,57 +76,77 @@ int main (void){
 	//state = TEST;
 	#endif
 	
-	uint8_t ballPosX = 40;
+	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
-	
 	uint8_t paddlePos = 0; 
-	
-	//uint8_t ball2PosX = 0;
-	//uint8_t ball2PosY = 13;
 	
 	uint8_t increasing = 1;
 	uint8_t increasing2 = 1;
 
-	for(;;){	//Infinite loop	
+	for(;;){	
 	
 		switch(state){
 			
-			case IDLE: //Reset all the things. LATER: Wait for user input to begin.
+			case IDLE: 
 				
-				state = PLAYING;
-				ballPosX = 0;
-				ballPosY = 0;
+				ballPosX = 31;
+				ballPosY = 10;
+				paddlePos = 30;
 				increasing = 1;
 				increasing2 = 1;
 				numBricks = 20;
 				uint8_t i,j;
+				
+				//populate brick sprites from program memory
 				for (j=0;j<2;j++){
 					for(i=0;i<64;i++){
 						gameField[j][i] = pgm_read_byte(&brickSprites[j][i]);
 					}
 				}
+				
+				//Reset brick collision/status constructs
 				for (j=0;j<4;j++){
 					for(i=0;i<5;i++){
 						brickStatus[j][i] = 3;
 					}
 					edgePositions[j] = 0;
 				}
+				
+				//Re-draw screen
+				clearScreen();
 				drawBall(ballPosX, ballPosY, paddlePos);
 				drawBricks();
 				drawPaddle(paddlePos);
-				//CLEAR SCREEN??
-				
+					
+				//Wait for user input to start game. If 10s passes, start demo mode.		
 				ADMUX |= (0x03)|(1 << ADLAR); 
 				ADCSRA |= (1 << ADEN); //enable adc
+				TCCR1 |= 0x0F; //Prescale to 1/16384
+				TCNT1 = 0x00;
+				OCR1A = 0xFF;
 				_delay_us(10);
 				for(;;){
 					ADCSRA |= (1 << ADSC);
 					while(ADCSRA & (1 <<ADSC));
 
-					if(ADCH != 0xFF){//Wait for user input to start the game
+					if(ADCH > 20 && ADCH < 40) //left on joystick
+					{
+						increasing2 = 1;
 						state = PLAYING;
 						break;
-					}	
+					}
+					else if(ADCH > 155 && ADCH < 175) //right on joystick
+					{
+						increasing2 = 0;
+						state = PLAYING;
+						break;
+					}
+					else if(TIFR & 0x40){
+						
+						TIFR |= 0x40;
+						state = DEMO;
+						break;
+					}
 					_delay_ms(20);
 				}
 				
@@ -246,7 +266,8 @@ int main (void){
 				break;
 				
 			case DEMO:
-				state = IDLE;
+				//state = IDLE;
+				print8BitNum(10);
 				break;
 			case TEST: 
 			
