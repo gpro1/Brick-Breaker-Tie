@@ -9,7 +9,9 @@
 
 enum direction {NONE, HRZ, VRT, BOTH};
 
-enum gameState {IDLE, PLAYING, LOST, WON, DEMO, TEST};
+enum gameState {IDLE, PLAYING, GAME_OVER, DEMO, TEST};
+	
+enum gameOutcome {WON, LOST};
 
 void initializeTestDisplay();
 void clearScreen();
@@ -47,6 +49,20 @@ const uint8_t brickSprites[2][64] PROGMEM = {
 										0x00, 0x00, 0x00}
 							
 									   };
+									
+const uint8_t winScreen[64] PROGMEM = { 0x00, 0x04, 0x0A, 0x04, 0x00, 0x50, 0x20, 0x52, 0x07, 0x02, 0x00, 0x00,
+										0x70, 0x08, 0x0F, 0x08, 0x70, 0x00, 0x3E, 0x41, 0x41, 0x41, 0x3E, 0x00,
+										0x7E, 0x01, 0x01, 0x01, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x07, 
+										0x38, 0x07, 0x78, 0x00, 0x3E, 0x41, 0x41, 0x41, 0x3E, 0x00, 0x7F, 0x60, 
+										0x1C, 0x03, 0x7F, 0x00, 0x7D, 0x00, 0x00, 0x00, 0x00, 0x20, 0x70, 0x20,
+										0x00, 0x04, 0x0A, 0x04};
+										
+const uint8_t loseScreen[64] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x08, 0x0F,
+										 0x08, 0x70, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00, 0x1E, 0x01, 0x01,
+										 0x01, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x7F, 0x00, 0x00,
+										 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00, 0x09, 0x15, 0x15, 0x15, 0x12,
+										 0x00, 0x7E, 0x11, 0x11, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+										 0x00, 0x00, 0x00, 0x00};
 							
 
 uint8_t gameField[2][64]; //Stores current brick pattern 
@@ -69,6 +85,7 @@ int main (void){
 	initializeTestDisplay();
 	
 	enum gameState state;
+	enum gameOutcome outcome;
 	
 	state = IDLE;
 	
@@ -96,6 +113,7 @@ int main (void){
 				increasing2 = 1;
 				numBricks = 20;
 				uint8_t i,j;
+				uint8_t demo_count = 0;
 				
 				//populate brick sprites from program memory
 				for (j=0;j<2;j++){
@@ -118,7 +136,7 @@ int main (void){
 				drawBricks();
 				drawPaddle(paddlePos);
 					
-				//Wait for user input to start game. If 10s passes, start demo mode.		
+				//Wait for user input to start game. If ~10s passes, start demo mode.		
 				ADMUX |= (0x03)|(1 << ADLAR); 
 				ADCSRA |= (1 << ADEN); //enable adc
 				TCCR1 |= 0x0F; //Prescale to 1/16384
@@ -144,10 +162,16 @@ int main (void){
 					else if(TIFR & 0x40){
 						
 						TIFR |= 0x40;
-						state = DEMO;
-						break;
+						TCNT1 = 0x00;
+						demo_count++;
+						if (demo_count == 2){ //Timer expired (demo mode)
+							outcome = WON;
+							state = GAME_OVER;
+							break;
+						}
 					}
 					_delay_ms(20);
+					
 				}
 				
 				
@@ -186,7 +210,8 @@ int main (void){
 					}
 					if(ballPosY == 0){
 						//increasing = 1;
-						state = LOST;
+						outcome = LOST;
+						state = GAME_OVER;
 						break;
 					}
 					if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH+2){
@@ -231,7 +256,8 @@ int main (void){
 						}
 					
 						if (numBricks == 0){
-							state = WON;
+							outcome = WON;
+							state = GAME_OVER;
 							break;
 						}
 						
@@ -257,12 +283,54 @@ int main (void){
 			
 				break;
 				
-			case LOST:
-				state = IDLE;
-				break;
-				
-			case WON:
+			case GAME_OVER:
 				clearScreen();
+				uint8_t USI_Buf[66] = {0};
+				USI_Buf[0] = (0x3D<<1);
+				USI_Buf[1] = 0x01;
+				
+				//Set starting & ending column
+				USI_Buf[2] = 0x21;
+				USI_Buf[3] = 0x20; //start at 32
+				USI_Buf[4] = 0x5F; //Stop at 95
+				USI_TWI_Start_Read_Write(USI_Buf, 5);
+				
+				//Set starting & ending page
+				USI_Buf[2] = 0x22;
+				USI_Buf[3] = 0x03; //Start at 3
+				USI_Buf[4] = 0x03; //End at 3
+				USI_TWI_Start_Read_Write(USI_Buf, 5);
+				
+				USI_Buf[1] = 0x40;
+						
+				for (i = 0; i < 64; i++){
+					
+					if (outcome == WON){
+						USI_Buf[i+2] = pgm_read_byte(&winScreen[63-i]);
+					}
+					else{
+						USI_Buf[i+2] = pgm_read_byte(&loseScreen[63-i]);
+					}
+				}				
+				
+				USI_TWI_Start_Read_Write(USI_Buf, 66);
+				
+				USI_Buf[1] = 0x01;
+				for (i = 0; i < 6; i++){
+					if (outcome == WON){
+						USI_Buf[2] = 0xA7;
+						USI_TWI_Start_Read_Write(USI_Buf, 3);
+						_delay_ms(150);
+						USI_Buf[2] = 0xA6;
+						USI_TWI_Start_Read_Write(USI_Buf, 3);
+						_delay_ms(150);
+					}
+				}
+				
+				
+				_delay_ms(5000);
+				state = IDLE;
+				
 				break;
 				
 			case DEMO:
