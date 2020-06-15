@@ -1,4 +1,4 @@
-//#define TESTING
+#define TESTING
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
 #include <avr/io.h>
@@ -9,9 +9,12 @@
 
 enum direction {NONE, HRZ, VRT, BOTH};
 
-enum gameState {IDLE, PLAYING, LOST, DEMO, TEST};
+enum gameState {IDLE, PLAYING, GAME_OVER, DEMO, TEST};
+	
+enum gameOutcome {WON, LOST};
 
-void initializeTestDisplay(); //RE-WRITE FOR SMALLER DISPLAY
+void initializeTestDisplay();
+void clearScreen();
 void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
 void drawBricks();
 enum direction checkCollision(uint8_t x, uint8_t y);
@@ -24,6 +27,8 @@ const uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 
 uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
 
 uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}}; //for harder to break bricks (later)
+	
+uint8_t numBricks;
 
 //Stores initial brick pattern
 const uint8_t brickSprites[2][64] PROGMEM = {
@@ -44,6 +49,20 @@ const uint8_t brickSprites[2][64] PROGMEM = {
 										0x00, 0x00, 0x00}
 							
 									   };
+									
+const uint8_t winScreen[64] PROGMEM = { 0x00, 0x04, 0x0A, 0x04, 0x00, 0x50, 0x20, 0x52, 0x07, 0x02, 0x00, 0x00,
+										0x70, 0x08, 0x0F, 0x08, 0x70, 0x00, 0x3E, 0x41, 0x41, 0x41, 0x3E, 0x00,
+										0x7E, 0x01, 0x01, 0x01, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x07, 
+										0x38, 0x07, 0x78, 0x00, 0x3E, 0x41, 0x41, 0x41, 0x3E, 0x00, 0x7F, 0x60, 
+										0x1C, 0x03, 0x7F, 0x00, 0x7D, 0x00, 0x00, 0x00, 0x00, 0x20, 0x70, 0x20,
+										0x00, 0x04, 0x0A, 0x04};
+										
+const uint8_t loseScreen[64] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x08, 0x0F,
+										 0x08, 0x70, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00, 0x1E, 0x01, 0x01,
+										 0x01, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x7F, 0x00, 0x00,
+										 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00, 0x09, 0x15, 0x15, 0x15, 0x12,
+										 0x00, 0x7E, 0x11, 0x11, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+										 0x00, 0x00, 0x00, 0x00};
 							
 
 uint8_t gameField[2][64]; //Stores current brick pattern 
@@ -66,64 +85,93 @@ int main (void){
 	initializeTestDisplay();
 	
 	enum gameState state;
+	enum gameOutcome outcome;
 	
 	state = IDLE;
 	
 	#ifdef TESTING
-	state = TEST;
+	//state = TEST;
 	#endif
 	
 	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
-	
-	uint8_t paddlePos = 40; 
-	
-	//uint8_t ball2PosX = 0;
-	//uint8_t ball2PosY = 13;
+	uint8_t paddlePos = 0; 
 	
 	uint8_t increasing = 1;
 	uint8_t increasing2 = 1;
 
-	for(;;){	//Infinite loop	
+	for(;;){	
 	
 		switch(state){
 			
-			case IDLE: //Reset all the things. LATER: Wait for user input to begin.
+			case IDLE: 
 				
-				state = PLAYING;
-				ballPosX = 0;
-				ballPosY = 0;
+				ballPosX = 31;
+				ballPosY = 10;
+				paddlePos = 30;
 				increasing = 1;
 				increasing2 = 1;
+				numBricks = 20;
 				uint8_t i,j;
+				uint8_t demo_count = 0;
+				
+				//populate brick sprites from program memory
 				for (j=0;j<2;j++){
 					for(i=0;i<64;i++){
 						gameField[j][i] = pgm_read_byte(&brickSprites[j][i]);
 					}
 				}
+				
+				//Reset brick collision/status constructs
 				for (j=0;j<4;j++){
 					for(i=0;i<5;i++){
 						brickStatus[j][i] = 3;
 					}
 					edgePositions[j] = 0;
 				}
+				
+				//Re-draw screen
+				clearScreen();
 				drawBall(ballPosX, ballPosY, paddlePos);
 				drawBricks();
 				drawPaddle(paddlePos);
-				//CLEAR SCREEN??
-				
+					
+				//Wait for user input to start game. If ~10s passes, start demo mode.		
 				ADMUX |= (0x03)|(1 << ADLAR); 
 				ADCSRA |= (1 << ADEN); //enable adc
+				TCCR1 |= 0x0F; //Prescale to 1/16384
+				TCNT1 = 0x00;
+				OCR1A = 0xFF;
 				_delay_us(10);
 				for(;;){
 					ADCSRA |= (1 << ADSC);
 					while(ADCSRA & (1 <<ADSC));
 
-					if(ADCH != 0xFF){//Wait for user input to start the game
+					if(ADCH > 20 && ADCH < 40) //left on joystick
+					{
+						increasing2 = 1;
 						state = PLAYING;
 						break;
-					}	
+					}
+					else if(ADCH > 155 && ADCH < 175) //right on joystick
+					{
+						increasing2 = 0;
+						state = PLAYING;
+						break;
+					}
+					else if(TIFR & 0x40){
+						
+						TIFR |= 0x40;
+						TCNT1 = 0x00;
+						demo_count++;
+						if (demo_count == 2){ //Timer expired (demo mode)
+							outcome = WON;
+							state = GAME_OVER;
+							break;
+						}
+					}
 					_delay_ms(20);
+					
 				}
 				
 				
@@ -162,7 +210,8 @@ int main (void){
 					}
 					if(ballPosY == 0){
 						//increasing = 1;
-						state = LOST;
+						outcome = LOST;
+						state = GAME_OVER;
 						break;
 					}
 					if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH+2){
@@ -178,12 +227,16 @@ int main (void){
 					
 					if(ADCH > 20 && ADCH < 40) //left on joystick
 					{
-						paddlePos++;
+						if (paddlePos < 54){
+							paddlePos++;
+						}
 						drawPaddle(paddlePos);
 					}
 					else if(ADCH > 155 && ADCH < 175) //right on joystick
 					{
-						paddlePos--;
+						if (paddlePos > 0){
+							paddlePos--;
+						}
 						drawPaddle(paddlePos);
 					}
 					
@@ -201,6 +254,13 @@ int main (void){
 							increasing ^= 0x01;
 							increasing2 ^= 0x01;
 						}
+					
+						if (numBricks == 0){
+							outcome = WON;
+							state = GAME_OVER;
+							break;
+						}
+						
 					}
 					else if(ballPosY <= 6){ //check paddle collisions if ball is low enough
 						
@@ -216,7 +276,6 @@ int main (void){
 						
 					}
 					
-					
 					//redraw ball
 					drawBall(ballPosX, ballPosY, paddlePos);	
 						
@@ -224,15 +283,63 @@ int main (void){
 			
 				break;
 				
-			case LOST:
+			case GAME_OVER:
+				clearScreen();
+				uint8_t USI_Buf[66] = {0};
+				USI_Buf[0] = (0x3D<<1);
+				USI_Buf[1] = 0x01;
+				
+				//Set starting & ending column
+				USI_Buf[2] = 0x21;
+				USI_Buf[3] = 0x20; //start at 32
+				USI_Buf[4] = 0x5F; //Stop at 95
+				USI_TWI_Start_Read_Write(USI_Buf, 5);
+				
+				//Set starting & ending page
+				USI_Buf[2] = 0x22;
+				USI_Buf[3] = 0x03; //Start at 3
+				USI_Buf[4] = 0x03; //End at 3
+				USI_TWI_Start_Read_Write(USI_Buf, 5);
+				
+				USI_Buf[1] = 0x40;
+						
+				for (i = 0; i < 64; i++){
+					
+					if (outcome == WON){
+						USI_Buf[i+2] = pgm_read_byte(&winScreen[63-i]);
+					}
+					else{
+						USI_Buf[i+2] = pgm_read_byte(&loseScreen[63-i]);
+					}
+				}				
+				
+				USI_TWI_Start_Read_Write(USI_Buf, 66);
+				
+				USI_Buf[1] = 0x01;
+				for (i = 0; i < 6; i++){
+					if (outcome == WON){
+						USI_Buf[2] = 0xA7;
+						USI_TWI_Start_Read_Write(USI_Buf, 3);
+						_delay_ms(150);
+						USI_Buf[2] = 0xA6;
+						USI_TWI_Start_Read_Write(USI_Buf, 3);
+						_delay_ms(150);
+					}
+				}
+				
+				
+				_delay_ms(5000);
 				state = IDLE;
+				
 				break;
-			case DEMO: 
-				state = IDLE;
+				
+			case DEMO:
+				//state = IDLE;
+				print8BitNum(10);
 				break;
 			case TEST: 
 			
-				//print8BitNum(10);
+				print8BitNum(10);
 
 							
 				break;
@@ -353,7 +460,7 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 				if(brickStatus[i-1][j-1] == 3){
 					brickStatus[i-1][j-1] = 0; //maybe more appropriate inside the function?
 					removeBrick(j,i);
-					//numCollisions++;
+					numCollisions++;
 					if(edgePositions[i] != prevEdgePositions[i] && collisionDir == NONE){
 						collisionDir = VRT;		
 					}
@@ -370,6 +477,13 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 			}
 		}
 	
+	}
+	
+	if (numBricks > numCollisions){
+		numBricks = numBricks - numCollisions;
+	}
+	else{
+		numBricks = 0;
 	}
 	
 	return(collisionDir);
@@ -448,7 +562,7 @@ void removeBrick(uint8_t column, uint8_t row){
 	USI_Buf[3] = page; 
 	USI_Buf[4] = page; 
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
-	
+		
 	//Update screen, update gameField
 	USI_Buf[1] = 0x40;
 	
@@ -621,7 +735,7 @@ void initializeTestDisplay(){
 	USI_Buf[1] = 0x01;
 	
 	//Turn on charge pump regulator
-	USI_Buf[2] = 0x8D;;
+	USI_Buf[2] = 0x8D;
 	USI_Buf[3] = 0x14;
 	USI_TWI_Start_Read_Write(USI_Buf, 4);
 		
@@ -634,44 +748,10 @@ void initializeTestDisplay(){
 	USI_Buf[3] = 0x00;
 	USI_TWI_Start_Read_Write(USI_Buf, 4);	
 	
-	//Set starting & ending column for drawing border on big screen 
-	USI_Buf[2] = 0x21;
-	USI_Buf[3] = 0x1F; //start at 31
-	USI_Buf[4] = 0x60; //Stop at 96
-	USI_TWI_Start_Read_Write(USI_Buf, 5);
-	
-	//Set starting & ending page for drawing border on big screen
-	USI_Buf[2] = 0x22;
-	USI_Buf[3] = 0x00; //Start at 0
-	USI_Buf[4] = 0x06; //End at 6
-	USI_TWI_Start_Read_Write(USI_Buf, 5);
-	
-	uint8_t i = 0;
-	uint8_t bufIndex = 0;
-	uint8_t j = 0;
-	USI_Buf[1] = 0x40;
-	
-	//Draw border
-	for (j = 0; j < 7; j++){
-		for (i = 0; i<66;i++){
-	
-			if(i == 0 || i == 65){
-				USI_Buf[bufIndex+2] = 0xff;
-			}
-			else if (j==6){
-				USI_Buf[bufIndex+2] = 0x01;
-			}
-			else{
-				USI_Buf[bufIndex+2] = 0x00;
-			}
-			bufIndex++;
-		}
-		USI_TWI_Start_Read_Write(USI_Buf, 68);
-		i = 0;
-		bufIndex = 0;
-	}
+	clearScreen();
 	
 	USI_Buf[1] = 0x01;
+	
 	//Set starting & ending column for small display (64x48)
 	USI_Buf[2] = 0x21;
 	USI_Buf[3] = 0x20; //start at 32
@@ -686,6 +766,40 @@ void initializeTestDisplay(){
 	
 }
 
+//Clears the screen
+void clearScreen(){
+	
+	uint8_t USI_Buf[80] = {0}; 
+		
+	USI_Buf[0] = (0x3D<<1)|0;
+	USI_Buf[1] = 0x01;
+	
+	//Set starting & ending column for small display (64x48)
+	USI_Buf[2] = 0x21;
+	USI_Buf[3] = 0x20; //start at 32
+	USI_Buf[4] = 0x5f; //Stop at 95
+	USI_TWI_Start_Read_Write(USI_Buf, 5);
+	
+	//Set starting & ending page for small display (64x48)
+	USI_Buf[2] = 0x22;
+	USI_Buf[3] = 0x00; //Start at 0
+	USI_Buf[4] = 0x05; //End at 5
+	USI_TWI_Start_Read_Write(USI_Buf, 5);
+	
+	uint8_t i = 0;
+	uint8_t j = 0;
+	USI_Buf[1] = 0x40;
+	
+	//Clear
+	for (j = 0; j < 6; j++){
+		for (i = 0; i<64;i++){
+			USI_Buf[i+2] = 0x00;		
+		}
+		USI_TWI_Start_Read_Write(USI_Buf, 66);
+		i = 0;	
+	}	
+}
+
 #ifdef TESTING
 void print8BitNum(uint8_t num){
 	
@@ -696,13 +810,13 @@ void print8BitNum(uint8_t num){
 		USI_Buf[1] = 0x01;
 		//Set starting & ending column
 		USI_Buf[2] = 0x21;
-		USI_Buf[3] = 0x00;
-		USI_Buf[4] = 0x08; 
+		USI_Buf[3] = 0x31;
+		USI_Buf[4] = 0x39; 
 		USI_TWI_Start_Read_Write(USI_Buf, 5);
 		//select page
 		USI_Buf[2] = 0x22;
-		USI_Buf[3] = 0; 
-		USI_Buf[4] = 0; 
+		USI_Buf[3] = 1; 
+		USI_Buf[4] = 1; 
 		USI_TWI_Start_Read_Write(USI_Buf, 5);
 		
 		USI_Buf[1] = 0x40;
