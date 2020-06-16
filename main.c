@@ -99,6 +99,10 @@ int main (void){
 	
 	uint8_t increasing = 1;
 	uint8_t increasing2 = 1;
+	
+	uint8_t demo_mode = 0;
+	uint8_t demo_dir  = 0;
+	int8_t ballTarget = 0;
 
 	for(;;){	
 	
@@ -165,8 +169,10 @@ int main (void){
 						TCNT1 = 0x00;
 						demo_count++;
 						if (demo_count == 2){ //Timer expired (demo mode)
-							outcome = WON;
-							state = GAME_OVER;
+							demo_mode = 1;
+							increasing2 = demo_dir;
+							demo_dir ^= 0x01;
+							state = PLAYING;
 							break;
 						}
 					}
@@ -182,6 +188,7 @@ int main (void){
 				TCCR0A |= 0x02; //CTC mode;
 				TCCR0B |= 0x05; //prescale 1024
 				OCR0A = 98; //approx 100ms period
+				uint8_t roofCollision = 0;
 					
 				//Game loop (timed event loop, time slice = ~100ms)
 				while(1){
@@ -207,6 +214,7 @@ int main (void){
 					//Check for boundary collisions
 					if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT+2){
 						increasing = 0;
+						roofCollision = 1;
 					}
 					if(ballPosY == 0){
 						//increasing = 1;
@@ -222,28 +230,49 @@ int main (void){
 					}
 					
 					//Check for user input + move paddle
-					ADCSRA |= (1 << ADSC);
-					while(ADCSRA & (1 <<ADSC));
+					if (demo_mode == 0){
 					
-					if(ADCH > 20 && ADCH < 40) //left on joystick
-					{
-						if (paddlePos < 54){
-							paddlePos++;
+						ADCSRA |= (1 << ADSC);
+						while(ADCSRA & (1 <<ADSC));
+					
+						if(ADCH > 20 && ADCH < 40) //left on joystick
+						{
+							if (paddlePos < 54){
+								paddlePos++;
+							}
+							drawPaddle(paddlePos);
 						}
-						drawPaddle(paddlePos);
+						else if(ADCH > 155 && ADCH < 175) //right on joystick
+						{
+							if (paddlePos > 0){
+								paddlePos--;
+							}
+							drawPaddle(paddlePos);
+						}
 					}
-					else if(ADCH > 155 && ADCH < 175) //right on joystick
-					{
-						if (paddlePos > 0){
-							paddlePos--;
+					else{ //demo mode
+						
+						int8_t paddleDiff = (int8_t)paddlePos - ballTarget;
+						if (paddleDiff > 0){
+							if (paddlePos > 0){
+								paddlePos--;
+							}
+							drawPaddle(paddlePos);
 						}
-						drawPaddle(paddlePos);
+						else if (paddleDiff < 0){
+							if (paddlePos < 54){
+								paddlePos++;
+							}
+							drawPaddle(paddlePos);
+						}
+						
 					}
 					
 					//Check for brick collisions if ball is high enough
 					if(ballPosY >= 32 - BALL_HEIGHT){
 						enum direction newCollisions;
 						newCollisions = checkCollision(ballPosX, ballPosY);
+						int8_t ballDelta = 0;
 						if(newCollisions == HRZ){
 							increasing2 ^= 0x01;
 						}
@@ -253,6 +282,21 @@ int main (void){
 						else if(newCollisions == BOTH){
 							increasing ^= 0x01;
 							increasing2 ^= 0x01;
+						}
+						
+						if (demo_mode == 1){
+							if (newCollisions != NONE | roofCollision == 1){
+								roofCollision = 0;
+								ballDelta = (ballPosY-6);
+								ballDelta *= increasing2?1:-1;
+								ballTarget = ballDelta + (int8_t)ballPosX;
+								if (ballTarget > (DISPLAY_SIZE_X - BALL_WIDTH+2)){
+									ballTarget = (2*(DISPLAY_SIZE_X -BALL_WIDTH+2)) - ballTarget;
+								}
+								else if (ballTarget < 0){
+									ballTarget = ballTarget * (-1);
+								}
+							}
 						}
 					
 						if (numBricks == 0){
@@ -272,6 +316,9 @@ int main (void){
 						else if(newCollisions == BOTH){
 							increasing ^= 0x01;
 							increasing2 ^= 0x01;
+						}
+						if(newCollisions != NONE){
+							ballTarget = 28;
 						}
 						
 					}
@@ -333,10 +380,6 @@ int main (void){
 				
 				break;
 				
-			case DEMO:
-				//state = IDLE;
-				print8BitNum(10);
-				break;
 			case TEST: 
 			
 				print8BitNum(10);
