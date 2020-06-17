@@ -417,8 +417,6 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 		edgePositions[i] = 0;
 	}
 	
-	
-		
 	enum direction collisionDir;
 	collisionDir = NONE;
 	
@@ -515,7 +513,7 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 					}
 					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == VRT){
 						collisionDir = BOTH;
-					}*/ //Maybe implement horizontal later? Issues with this implementation
+					} *///Maybe implement horizontal later? Issues with this implementation
 				}
 			}
 		}
