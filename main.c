@@ -1,4 +1,4 @@
-#define TESTING
+//#define TESTING
 #define F_CPU 1000000
 #include "USI_TWI_Master.h"
 #include <avr/io.h>
@@ -17,16 +17,16 @@ void initializeTestDisplay();
 void clearScreen();
 void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
 void drawBricks();
-enum direction checkCollision(uint8_t x, uint8_t y);
+enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir);
 void removeBrick(uint8_t column, uint8_t row);
 enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
 const uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
 
-//A weird array representing what column/row the edges of the ball are in. Did it this way so I could use an array to check collisions instead of another huge if statement
+//Array representing what column/row the edges of the ball are in.
 //Global so it can be preserved so we can check the previous position
 uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
 
-uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}}; //for harder to break bricks (later)
+uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}}; //for harder to break bricks (implement later)
 	
 uint8_t numBricks;
 
@@ -67,17 +67,11 @@ const uint8_t loseScreen[64] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
 
 uint8_t gameField[2][64]; //Stores current brick pattern 
 
-//uint8_t ballSprite[]= {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00};
-
-//uint8_t bricks[20] = {0};
 #define DISPLAY_SIZE_X 64
 #define DISPLAY_SIZE_Y 48
 
-#define BALL_HEIGHT 8 //make smaller
+#define BALL_HEIGHT 8 
 #define BALL_WIDTH 8
-
-
-
 
 int main (void){ 
 	
@@ -90,7 +84,7 @@ int main (void){
 	state = IDLE;
 	
 	#ifdef TESTING
-	//state = TEST;
+	state = TEST;
 	#endif
 	
 	uint8_t ballPosX = 0;
@@ -119,7 +113,7 @@ int main (void){
 				uint8_t i,j;
 				uint8_t demo_count = 0;
 				
-				//populate brick sprites from program memory
+				//Populate brick sprites from program memory
 				for (j=0;j<2;j++){
 					for(i=0;i<64;i++){
 						gameField[j][i] = pgm_read_byte(&brickSprites[j][i]);
@@ -142,7 +136,7 @@ int main (void){
 					
 				//Wait for user input to start game. If ~10s passes, start demo mode.		
 				ADMUX |= (0x03)|(1 << ADLAR); 
-				ADCSRA |= (1 << ADEN); //enable adc
+				ADCSRA |= (1 << ADEN); //Enable adc
 				TCCR1 |= 0x0F; //Prescale to 1/16384
 				TCNT1 = 0x00;
 				OCR1A = 0xFF;
@@ -151,13 +145,13 @@ int main (void){
 					ADCSRA |= (1 << ADSC);
 					while(ADCSRA & (1 <<ADSC));
 
-					if(ADCH > 20 && ADCH < 40) //left on joystick
+					if(ADCH > 20 && ADCH < 40) //Left on joystick
 					{
 						increasing2 = 1;
 						state = PLAYING;
 						break;
 					}
-					else if(ADCH > 155 && ADCH < 175) //right on joystick
+					else if(ADCH > 155 && ADCH < 175) //Right on joystick
 					{
 						increasing2 = 0;
 						state = PLAYING;
@@ -168,7 +162,7 @@ int main (void){
 						TIFR |= 0x40;
 						TCNT1 = 0x00;
 						demo_count++;
-						if (demo_count == 2){ //Timer expired (demo mode)
+						if (demo_count == 2){ //Timer expired (go to demo mode)
 							demo_mode = 1;
 							increasing2 = demo_dir;
 							demo_dir ^= 0x01;
@@ -217,7 +211,6 @@ int main (void){
 						roofCollision = 1;
 					}
 					if(ballPosY == 0){
-						//increasing = 1;
 						outcome = LOST;
 						state = GAME_OVER;
 						break;
@@ -250,7 +243,7 @@ int main (void){
 							drawPaddle(paddlePos);
 						}
 					}
-					else{ //demo mode
+					else{ //Demo mode, move towards target
 						
 						int8_t paddleDiff = (int8_t)paddlePos - ballTarget;
 						if (paddleDiff > 0){
@@ -271,7 +264,7 @@ int main (void){
 					//Check for brick collisions if ball is high enough
 					if(ballPosY >= 32 - BALL_HEIGHT){
 						enum direction newCollisions;
-						newCollisions = checkCollision(ballPosX, ballPosY);
+						newCollisions = checkCollision(ballPosX, ballPosY, (increasing | (increasing2 << 1)));
 						int8_t ballDelta = 0;
 						if(newCollisions == HRZ){
 							increasing2 ^= 0x01;
@@ -284,8 +277,8 @@ int main (void){
 							increasing2 ^= 0x01;
 						}
 						
-						if (demo_mode == 1){
-							if (newCollisions != NONE | roofCollision == 1){
+						if (demo_mode == 1){ //re-calculate target for demo mode
+							if (newCollisions != NONE || roofCollision == 1){
 								roofCollision = 0;
 								ballDelta = (ballPosY-6);
 								ballDelta *= increasing2?1:-1;
@@ -321,6 +314,12 @@ int main (void){
 							ballTarget = 28;
 						}
 						
+					}
+					else{ //Reset edge positions
+						edgePositions[0] = 0;
+						edgePositions[1] = 0;
+						edgePositions[2] = 0;
+						edgePositions[3] = 0;
 					}
 					
 					//redraw ball
@@ -363,7 +362,7 @@ int main (void){
 				USI_TWI_Start_Read_Write(USI_Buf, 66);
 				
 				USI_Buf[1] = 0x01;
-				for (i = 0; i < 6; i++){
+				for (i = 0; i < 6; i++){ //Flash the screen for fun
 					if (outcome == WON){
 						USI_Buf[2] = 0xA7;
 						USI_TWI_Start_Read_Write(USI_Buf, 3);
@@ -397,18 +396,19 @@ int main (void){
 }
 
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
-//Maybe change to checkpotentialcollsiion? Sends back potential collisions and main can check ball direction?
 //~45ms worst case (3x removeBrick, other code negligible) 
-enum direction checkCollision(uint8_t x, uint8_t y){
+enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir){
 	
-	//These will store the limits of the VISIBLE part of the sprite.
-	//Calculations are hard coded to my current sprite as I probably will not change it. 
+	//limits of the VISIBLE part of the sprite (hard-coded to sprite).
 	uint8_t spriteTop = y+5;
 	uint8_t spriteLeft = x+5;
 	uint8_t spriteRight = x+2;
 	uint8_t spriteBottom = y+2;
+	
 	uint8_t numCollisions = 0;
-	uint8_t i,j;
+	int8_t i,j;
+	uint8_t column = 0;
+	uint8_t row = 0;
 	
 	uint8_t prevEdgePositions[4];//left column, right column, top row, bottom row
 	//Reset edge positions
@@ -420,11 +420,7 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 	enum direction collisionDir;
 	collisionDir = NONE;
 	
-	//Find out one "brick space" the ball is in
-	//once this space is found, check ONLY the next one.
-	//This must be done twice (horizontal and vertically
-	//Once you find a space the brick is in, check if there is a block there, and add it as a collision (lets have an array?)
-	//At the end, check all the collisions, erase those blocks, and calculate the direction to be returned so the main can change the ball direction. 
+	//Find out which "brick space" each edge of the ball is in
 	
 	//Vertical
 	if(spriteTop < 35){
@@ -444,7 +440,7 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 		edgePositions[3] = 3;		
 	}
 	else if(spriteTop == 47){
-		edgePositions[2] = 4; //kind of true??
+		edgePositions[2] = 4; //kind of true
 		edgePositions[3] = 4;
 	}
 	
@@ -493,31 +489,33 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 		edgePositions[0] = 5;
 		edgePositions[1] = 5;
 	}
-	
+		
 	//Iterate through the brick positions that the ball is in and remove those bricks (if they exist)
-	for (j = edgePositions[1]; j <= edgePositions[0]; j++){
-		for (i = edgePositions[3]; i <= edgePositions[2]; i++){
-			if(i>0 && j>0){
-				if(brickStatus[i-1][j-1] == 3){
-					brickStatus[i-1][j-1] = 0; //maybe more appropriate inside the function?
-					removeBrick(j,i);
+	for (j = 1; j >= 0; j--){
+		column = edgePositions[j];
+		for (i = 3; i >= 2; i--){		
+			row = edgePositions[i];
+			if(column > 0 && row > 0){
+				if(brickStatus[row-1][column-1] == 3){
+					brickStatus[row-1][column-1] = 0; 
+					removeBrick(column,row);
 					numCollisions++;
-					if(edgePositions[i] != prevEdgePositions[i] && collisionDir == NONE){
-						collisionDir = VRT;		
-					}
-					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == HRZ){
-						collisionDir = BOTH;
-					}
-					/*if(edgePositions[j] != prevEdgePositions[j] && collisionDir == NONE){
-						collisionDir = HRZ;		
-					}
-					else if(edgePositions[i] != prevEdgePositions[i] && collisionDir == VRT){
-						collisionDir = BOTH;
-					} *///Maybe implement horizontal later? Issues with this implementation
 				}
 			}
 		}
+	}
 	
+	//Figure out collisions direction
+	j = !((ballDir & 0x02) == 0x02);
+	i = 2 + !((ballDir & 0x01) == 0x01);
+	if(edgePositions[i] != prevEdgePositions[i] && numCollisions > 0){ 
+		collisionDir = VRT;		
+	}
+	if(edgePositions[j] != prevEdgePositions[j] && collisionDir == NONE && numCollisions > 0){
+		collisionDir = HRZ;		
+	}
+	else if(edgePositions[j] != prevEdgePositions[j] && collisionDir == VRT && numCollisions > 1){
+		collisionDir = BOTH;
 	}
 	
 	if (numBricks > numCollisions){
@@ -528,7 +526,6 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 	}
 	
 	return(collisionDir);
-	
 }
 
 //Checks if the ball has hit the paddle, and returns "vrt" or "both" depending if the ball changes direction horizontally.
@@ -536,12 +533,10 @@ enum direction checkCollision(uint8_t x, uint8_t y){
 //requires ball X position, Paddle X position and ball horizontal direction
 enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir){
 	
-	//These will store the limits of the VISIBLE part of the sprite.
 	//Calculations are hard coded to my current sprite as I probably will not change it. 
 	uint8_t leftRightHit = 2; //1 for left, 0 for right
 	uint8_t spriteRight = ballX+2;
 
-	
 	enum direction collisionDir;
 	collisionDir = NONE;
 	
@@ -697,7 +692,7 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 	}
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
 	
-	//DrAW THE BALL!!
+	//Draw the ball
 	USI_Buf[1] = 0x40;
 	for(i = 0; i < j; i++){
 		
@@ -717,11 +712,6 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 			if(page >= 3) {
 				USI_Buf[i+2] |= gameField[page-3][i-8+x];
 			}
-			/*else if(page == 0){
-				if((x+i) >= paddleX && (x+i) <= (paddleX + 9)){
-					USI_Buf[i+2] |= 0x70; //OR in paddle
-				}
-			}*/
 		}
 		
 		
@@ -734,8 +724,6 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 
 //Bytes written: 24 worst case
 //(~ 15ms with code to be safe)
-//Will need to be edited for small display
-
 void drawPaddle(uint8_t x){
 	
 		uint8_t USI_Buf[18] = {0};
@@ -762,7 +750,7 @@ void drawPaddle(uint8_t x){
 		USI_TWI_Start_Read_Write(USI_Buf, 14);
 }
 
-//Initialize function for the 128x64 display. Draws a boundary to represent the real display I'm going to use
+//Initialize function for display
 void initializeTestDisplay(){
 	
 	uint8_t USI_Buf[80] = {0}; 
