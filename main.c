@@ -66,7 +66,8 @@ int main (void){
 	initializeTestDisplay();
 	drawBricks(); //I don't have a clear function so this will do
 	
-	
+	//USE THIS TO TEST RANDOM GENERATION. Use XORSHIFT32 for random generation, several ADC LSBs to seed random
+	//Figure out how to deal with 32 bit??
 	
 	DDRB |= (1 << PB4);
 	PORTB |= (1 << PB4); //Set PB4 HIGH before transmission, Low after. Measure this with a logic analyzer!
