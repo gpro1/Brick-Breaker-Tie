@@ -58,23 +58,44 @@ uint8_t gameField[2][64]; //Stores current brick pattern
 #define BALL_WIDTH 8
 
 
+struct xorshift32_state {
+	uint32_t a;
+};
+
+/* The state word must be initialized to non-zero */
+uint32_t xorshift32(struct xorshift32_state *state)
+{
+	/* Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs" */
+	uint32_t x = state->a;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return state->a = x;
+}
+
 
 
 int main (void){ 
 	
-	USI_TWI_Master_Initialise();
-	initializeTestDisplay();
-	drawBricks(); //I don't have a clear function so this will do
+	//USI_TWI_Master_Initialise();
+	//initializeTestDisplay();
+	//drawBricks(); //I don't have a clear function so this will do
 	
 	//USE THIS TO TEST RANDOM GENERATION. Use XORSHIFT32 for random generation, several ADC LSBs to seed random
 	//Figure out how to deal with 32 bit??
 	
-	DDRB |= (1 << PB4);
-	PORTB |= (1 << PB4); //Set PB4 HIGH before transmission, Low after. Measure this with a logic analyzer!
+	uint32_t rando;
+	static uint8_t num __attribute__((used));
+	struct xorshift32_state state;
+	state.a = 658;
 	
-	print8BitNum(0b01010101); //sends 21 bytes total. Once this works measure sending one byte? 
+	while(1){
+		
 	
-	PORTB &= ~(1<<PB4); 
+		rando = xorshift32(&state);
+		num = rando%48 + 10;
+	}
+	
 	
 	
 	/*enum gameState state;
