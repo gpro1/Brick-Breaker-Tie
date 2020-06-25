@@ -93,7 +93,7 @@ int main (void){
 		
 	
 		rando = xorshift32(&state);
-		num = rando%48 + 10;
+		num = rando%55;
 	}
 	
 	
