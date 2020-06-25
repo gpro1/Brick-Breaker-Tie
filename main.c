@@ -12,15 +12,26 @@ enum direction {NONE, HRZ, VRT, BOTH};
 enum gameState {IDLE, PLAYING, GAME_OVER, DEMO, TEST};
 	
 enum gameOutcome {WON, LOST};
+	
+struct xorshift32_state {
+	uint32_t a;
+};
 
 void initializeTestDisplay();
 void clearScreen();
 void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
+void drawPaddle(uint8_t x);
 void drawBricks();
 enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir);
 void removeBrick(uint8_t column, uint8_t row);
 enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
+uint32_t xorshift32(struct xorshift32_state *state);
+void seedRandom();
+uint8_t randomPosition();
+
 const uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
+
+static struct xorshift32_state randomState;
 
 //Array representing what column/row the edges of the ball are in.
 //Global so it can be preserved so we can check the previous position
@@ -77,6 +88,7 @@ int main (void){
 	
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
+	ADCSRA |= (1 << ADEN); //Enable adc
 	
 	enum gameState state;
 	enum gameOutcome outcome;
@@ -86,6 +98,8 @@ int main (void){
 	#ifdef TESTING
 	state = TEST;
 	#endif
+	
+	seedRandom();
 	
 	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
@@ -104,9 +118,10 @@ int main (void){
 			
 			case IDLE: 
 				
-				ballPosX = 31;
+				demo_mode = 0;
 				ballPosY = 10;
-				paddlePos = 30;
+				paddlePos = randomPosition();
+				ballPosX = paddlePos + 1;
 				increasing = 1;
 				increasing2 = 1;
 				numBricks = 20;
@@ -135,8 +150,8 @@ int main (void){
 				drawPaddle(paddlePos);
 					
 				//Wait for user input to start game. If ~10s passes, start demo mode.		
-				ADMUX |= (0x03)|(1 << ADLAR); 
-				ADCSRA |= (1 << ADEN); //Enable adc
+				ADMUX = 0x23; //Select joystick input, left adjust (only need 8-bit result)
+				//ADCSRA |= (1 << ADEN); //Enable adc
 				TCCR1 |= 0x0F; //Prescale to 1/16384
 				TCNT1 = 0x00;
 				OCR1A = 0xFF;
@@ -395,6 +410,35 @@ int main (void){
 	return 0;
 }
 
+uint32_t xorshift32(struct xorshift32_state *state){
+	/* Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs" */
+	uint32_t x = state->a;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return state->a = x;
+}
+
+//Seeds random function using the temperature reading
+void seedRandom(){
+	
+	ADMUX = 0x8F; //Set ADC to temp sensor.
+	uint32_t seed = 0;
+	
+	ADCSRA |= (1 << ADSC);
+	while(ADCSRA & (1 <<ADSC));
+	seed = (ADCH << 8) | ADCL;
+
+	randomState.a = seed;
+}
+
+//Generates a random paddle position (0-54)
+uint8_t randomPosition(){
+	uint32_t random32 = xorshift32(&randomState);
+	uint8_t random8 = random32%55; 
+	return random8;
+}
+
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
 //~45ms worst case (3x removeBrick, other code negligible) 
 enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir){
@@ -403,7 +447,7 @@ enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir){
 	uint8_t spriteTop = y+5;
 	uint8_t spriteLeft = x+5;
 	uint8_t spriteRight = x+2;
-	uint8_t spriteBottom = y+2;
+	//uint8_t spriteBottom = y+2;
 	
 	uint8_t numCollisions = 0;
 	int8_t i,j;
@@ -744,7 +788,7 @@ void drawPaddle(uint8_t x){
 		USI_Buf[1] = 0x40;
 		USI_Buf[2] = 0x00;
 		USI_Buf[13] = 0x00;
-		for(i; i < 10; i++){
+		for(i = 0; i < 10; i++){
 			USI_Buf[3+i] = 0x70;
 		}
 		USI_TWI_Start_Read_Write(USI_Buf, 14);
