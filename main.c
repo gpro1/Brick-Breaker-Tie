@@ -6,27 +6,42 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 
+#define DISPLAY_SIZE_X 64
+#define DISPLAY_SIZE_Y 48
+#define BALL_HEIGHT 8
+#define BALL_WIDTH 8
 
 enum direction {NONE, HRZ, VRT, BOTH};
 
 enum gameState {IDLE, PLAYING, GAME_OVER, DEMO, TEST};
 	
 enum gameOutcome {WON, LOST};
+	
+struct xorshift32_state {
+	uint32_t a;
+};
 
 void initializeTestDisplay();
 void clearScreen();
 void drawBall(uint8_t x, uint8_t y, uint8_t paddleX);
+void drawPaddle(uint8_t x);
 void drawBricks();
 enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir);
 void removeBrick(uint8_t column, uint8_t row);
 enum direction checkPaddleHit(uint8_t ballX, uint8_t paddleX, uint8_t ballDir);
+uint32_t xorshift32(struct xorshift32_state *state);
+void seedRandom();
+uint8_t randomPosition();
+
 const uint8_t ballSprite[] PROGMEM = {0x00, 0x00, 0x18, 0x2C, 0x34, 0x18, 0x00, 0x00}; 
 
-//Array representing what column/row the edges of the ball are in.
-//Global so it can be preserved so we can check the previous position
+static struct xorshift32_state randomState; //State for the random function
+
+//Array representing what column/row the edges of the ball are in. Global so it can be preserved so we can check the previous position
 uint8_t edgePositions [4] = {0}; //left column, right column, top row, bottom row
 
-uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}}; //for harder to break bricks (implement later)
+//Array representing which bricks are left. 5 columns, 4 rows. 
+uint8_t brickStatus[4][5] = {{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3},{3,3,3,3,3}}; //May make bricks harder to break (hence 3)
 	
 uint8_t numBricks;
 
@@ -64,19 +79,13 @@ const uint8_t loseScreen[64] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
 										 0x00, 0x7E, 0x11, 0x11, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 										 0x00, 0x00, 0x00, 0x00};
 							
-
 uint8_t gameField[2][64]; //Stores current brick pattern 
-
-#define DISPLAY_SIZE_X 64
-#define DISPLAY_SIZE_Y 48
-
-#define BALL_HEIGHT 8 
-#define BALL_WIDTH 8
 
 int main (void){ 
 	
 	USI_TWI_Master_Initialise();
 	initializeTestDisplay();
+	ADCSRA |= (1 << ADEN); //Enable adc
 	
 	enum gameState state;
 	enum gameOutcome outcome;
@@ -87,12 +96,14 @@ int main (void){
 	state = TEST;
 	#endif
 	
+	seedRandom();
+	
 	uint8_t ballPosX = 0;
 	uint8_t ballPosY = 0;
 	uint8_t paddlePos = 0; 
 	
-	uint8_t increasing = 1;
-	uint8_t increasing2 = 1;
+	uint8_t yDirection = 1; //up 1, down 0
+	uint8_t xDirection = 1; //left 1, right 0
 	
 	uint8_t demo_mode = 0;
 	uint8_t demo_dir  = 0;
@@ -104,16 +115,17 @@ int main (void){
 			
 			case IDLE: 
 				
-				ballPosX = 31;
+				demo_mode = 0;
 				ballPosY = 10;
-				paddlePos = 30;
-				increasing = 1;
-				increasing2 = 1;
+				paddlePos = randomPosition();
+				ballPosX = paddlePos + 1;
+				yDirection = 1;
+				xDirection = 1;
 				numBricks = 20;
 				uint8_t i,j;
 				uint8_t demo_count = 0;
 				
-				//Populate brick sprites from program memory
+				//Populate game field array from program memory
 				for (j=0;j<2;j++){
 					for(i=0;i<64;i++){
 						gameField[j][i] = pgm_read_byte(&brickSprites[j][i]);
@@ -128,32 +140,32 @@ int main (void){
 					edgePositions[j] = 0;
 				}
 				
-				//Re-draw screen
+				//Draw game field
 				clearScreen();
 				drawBall(ballPosX, ballPosY, paddlePos);
 				drawBricks();
 				drawPaddle(paddlePos);
 					
 				//Wait for user input to start game. If ~10s passes, start demo mode.		
-				ADMUX |= (0x03)|(1 << ADLAR); 
-				ADCSRA |= (1 << ADEN); //Enable adc
+				ADMUX = 0x23; //Select joystick input, left adjust (only need 8-bit result)
 				TCCR1 |= 0x0F; //Prescale to 1/16384
 				TCNT1 = 0x00;
 				OCR1A = 0xFF;
 				_delay_us(10);
+				
 				for(;;){
 					ADCSRA |= (1 << ADSC);
 					while(ADCSRA & (1 <<ADSC));
 
 					if(ADCH > 20 && ADCH < 40) //Left on joystick
 					{
-						increasing2 = 1;
+						xDirection = 1;
 						state = PLAYING;
 						break;
 					}
 					else if(ADCH > 155 && ADCH < 175) //Right on joystick
 					{
-						increasing2 = 0;
+						xDirection = 0;
 						state = PLAYING;
 						break;
 					}
@@ -164,14 +176,13 @@ int main (void){
 						demo_count++;
 						if (demo_count == 2){ //Timer expired (go to demo mode)
 							demo_mode = 1;
-							increasing2 = demo_dir;
+							xDirection = demo_dir;
 							demo_dir ^= 0x01;
 							state = PLAYING;
 							break;
 						}
 					}
-					_delay_ms(20);
-					
+					_delay_ms(20); 	
 				}
 				
 				
@@ -192,22 +203,22 @@ int main (void){
 					TIFR |= (1<<OCF0A);
 					
 					//Move the ball
-					if(increasing){
+					if(yDirection){
 						ballPosY++;
 					}
 					else{
 						ballPosY--;
 					}
-					if(increasing2){
+					if(xDirection){
 						ballPosX++;
 					}
 					else{
-						ballPosX--;
+						if (ballPosX != 0) ballPosX--;
 					}
 					
 					//Check for boundary collisions
 					if(ballPosY >= DISPLAY_SIZE_Y - BALL_HEIGHT+2){
-						increasing = 0;
+						yDirection = 0;
 						roofCollision = 1;
 					}
 					if(ballPosY == 0){
@@ -216,10 +227,10 @@ int main (void){
 						break;
 					}
 					if(ballPosX >= DISPLAY_SIZE_X - BALL_WIDTH+2){
-						increasing2 = 0;
+						xDirection = 0;
 					}
 					if(ballPosX == 0){
-						increasing2 = 1;
+						xDirection = 1;
 					}
 					
 					//Check for user input + move paddle
@@ -264,24 +275,26 @@ int main (void){
 					//Check for brick collisions if ball is high enough
 					if(ballPosY >= 32 - BALL_HEIGHT){
 						enum direction newCollisions;
-						newCollisions = checkCollision(ballPosX, ballPosY, (increasing | (increasing2 << 1)));
 						int8_t ballDelta = 0;
+						
+						newCollisions = checkCollision(ballPosX, ballPosY, (yDirection | (xDirection << 1)));
+						
 						if(newCollisions == HRZ){
-							increasing2 ^= 0x01;
+							xDirection ^= 0x01;
 						}
 						else if(newCollisions == VRT){
-							increasing ^= 0x01;
+							yDirection ^= 0x01;
 						}
 						else if(newCollisions == BOTH){
-							increasing ^= 0x01;
-							increasing2 ^= 0x01;
+							yDirection ^= 0x01;
+							xDirection ^= 0x01;
 						}
 						
 						if (demo_mode == 1){ //re-calculate target for demo mode
 							if (newCollisions != NONE || roofCollision == 1){
 								roofCollision = 0;
 								ballDelta = (ballPosY-6);
-								ballDelta *= increasing2?1:-1;
+								ballDelta *= xDirection?1:-1;
 								ballTarget = ballDelta + (int8_t)ballPosX;
 								if (ballTarget > (DISPLAY_SIZE_X - BALL_WIDTH+2)){
 									ballTarget = (2*(DISPLAY_SIZE_X -BALL_WIDTH+2)) - ballTarget;
@@ -302,13 +315,15 @@ int main (void){
 					else if(ballPosY <= 6){ //check paddle collisions if ball is low enough
 						
 						enum direction newCollisions;
-						newCollisions = checkPaddleHit(ballPosX, paddlePos, increasing2);
+						
+						newCollisions = checkPaddleHit(ballPosX, paddlePos, xDirection);
+						
 						if(newCollisions == VRT){
-							increasing ^= 0x01;
+							yDirection ^= 0x01;
 						}
 						else if(newCollisions == BOTH){
-							increasing ^= 0x01;
-							increasing2 ^= 0x01;
+							yDirection ^= 0x01;
+							xDirection ^= 0x01;
 						}
 						if(newCollisions != NONE){
 							ballTarget = 28;
@@ -325,8 +340,7 @@ int main (void){
 					//redraw ball
 					drawBall(ballPosX, ballPosY, paddlePos);	
 						
-				}
-			
+				}	
 				break;
 				
 			case GAME_OVER:
@@ -349,7 +363,7 @@ int main (void){
 				
 				USI_Buf[1] = 0x40;
 						
-				for (i = 0; i < 64; i++){
+				for (i = 0; i < 64; i++){ //Display the win or loss screen
 					
 					if (outcome == WON){
 						USI_Buf[i+2] = pgm_read_byte(&winScreen[63-i]);
@@ -357,8 +371,7 @@ int main (void){
 					else{
 						USI_Buf[i+2] = pgm_read_byte(&loseScreen[63-i]);
 					}
-				}				
-				
+				}					
 				USI_TWI_Start_Read_Write(USI_Buf, 66);
 				
 				USI_Buf[1] = 0x01;
@@ -372,19 +385,16 @@ int main (void){
 						_delay_ms(150);
 					}
 				}
-				
-				
+							
 				_delay_ms(5000);
 				state = IDLE;
 				
 				break;
 				
-			case TEST: 
-			
-				print8BitNum(10);
-
-							
+			case TEST: 		
+				print8BitNum(10);						
 				break;
+				
 			default:
 				state = IDLE;
 				break;
@@ -395,6 +405,36 @@ int main (void){
 	return 0;
 }
 
+//XORSHIFT32 algorithm for pseudo random numbers
+uint32_t xorshift32(struct xorshift32_state *state){
+	
+	uint32_t x = state->a;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return state->a = x;
+}
+
+//Seeds random function using the temperature reading from MCU
+void seedRandom(){
+	
+	ADMUX = 0x8F; //Set ADC to temp sensor.
+	uint32_t seed = 0;
+	
+	ADCSRA |= (1 << ADSC);
+	while(ADCSRA & (1 <<ADSC));
+	seed = (ADCH << 8) | ADCL;
+
+	randomState.a = seed;
+}
+
+//Generates a random paddle position (0-54)
+uint8_t randomPosition(){
+	uint32_t random32 = xorshift32(&randomState);
+	uint8_t random8 = random32%55; 
+	return random8;
+}
+
 //This function is currently hard coded to the number/position/shape of the bricks as well as the current ball sprite
 //~45ms worst case (3x removeBrick, other code negligible) 
 enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir){
@@ -403,7 +443,7 @@ enum direction checkCollision(uint8_t x, uint8_t y, uint8_t ballDir){
 	uint8_t spriteTop = y+5;
 	uint8_t spriteLeft = x+5;
 	uint8_t spriteRight = x+2;
-	uint8_t spriteBottom = y+2;
+	//uint8_t spriteBottom = y+2;
 	
 	uint8_t numCollisions = 0;
 	int8_t i,j;
@@ -624,9 +664,12 @@ void removeBrick(uint8_t column, uint8_t row){
 
 //Sort of slow, so only used on startup currently. Will be useful for starting a new game. 
 void drawBricks(){
-	
 		
 	uint8_t USI_Buf[130] = {0};
+	uint8_t i = 0;
+	uint8_t j = 0;
+	uint8_t bufIndex = 0;
+	
 	USI_Buf[0] = (0x3D<<1);
 	USI_Buf[1] = 0x01;
 	//Set starting & ending column for bricks
@@ -642,11 +685,7 @@ void drawBricks(){
 	USI_TWI_Start_Read_Write(USI_Buf, 5);
 	
 	USI_Buf[1] = 0x40;
-	uint8_t i = 0;
-	uint8_t j = 0;
-	uint8_t bufIndex = 0;
 
-	
 	for(i=0; i<2; i++){
 		for(j=0; j<64;j++){		
 			USI_Buf[bufIndex+2] = gameField[i][j];
@@ -713,14 +752,10 @@ void drawBall(uint8_t x, uint8_t y, uint8_t paddleX){
 				USI_Buf[i+2] |= gameField[page-3][i-8+x];
 			}
 		}
-		
-		
-		
 	}
 	USI_TWI_Start_Read_Write(USI_Buf, pagePixel?18:10); //8 extra bytes if the ball is on 2 pages
 	
 }
-
 
 //Bytes written: 24 worst case
 //(~ 15ms with code to be safe)
@@ -744,7 +779,7 @@ void drawPaddle(uint8_t x){
 		USI_Buf[1] = 0x40;
 		USI_Buf[2] = 0x00;
 		USI_Buf[13] = 0x00;
-		for(i; i < 10; i++){
+		for(i = 0; i < 10; i++){
 			USI_Buf[3+i] = 0x70;
 		}
 		USI_TWI_Start_Read_Write(USI_Buf, 14);
@@ -859,9 +894,7 @@ void print8BitNum(uint8_t num){
 			j = j << 1;
 		}
 		USI_Buf[10] = 0xC3;
-		USI_TWI_Start_Read_Write(USI_Buf, 11);
-		
-		
+		USI_TWI_Start_Read_Write(USI_Buf, 11);	
 }
 #endif
 
